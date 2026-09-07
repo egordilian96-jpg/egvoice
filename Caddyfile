@@ -1,0 +1,24 @@
+# EG Voice — Caddy reverse proxy
+# Замени egvoice.ru на свой домен.
+
+egvoice.ru {
+    # WebSocket для realtime (/ws)
+    reverse_proxy /ws* app:5000
+    # Всё остальное — приложение (API + фронт)
+    reverse_proxy app:5000
+
+    encode gzip zstd
+
+    # Безопасные заголовки
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options    "nosniff"
+        X-Frame-Options           "DENY"
+        Referrer-Policy           "strict-origin-when-cross-origin"
+    }
+}
+
+# LiveKit — отдельный поддомен, TLS для wss://
+livekit.egvoice.ru {
+    reverse_proxy livekit:7880
+}

@@ -1,0 +1,332 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Дизайн-язык LiveKit:
+ *   Dark:  ground #070707, cyan accent #1FD5F9
+ *   Light: ground #FDFDFC, blue accent  #002CF2
+ * Шрифт: Geist (display) + Inter (body) + Geist Mono (mono).
+ */
+
+:root {
+  --button-outline: rgba(0, 0, 0, 0.08);
+  --badge-outline: rgba(0, 0, 0, 0.05);
+  --opaque-button-border-intensity: -6;
+  --elevate-1: rgba(0, 0, 0, 0.03);
+  --elevate-2: rgba(0, 0, 0, 0.07);
+
+  /* Light — #FDFDFC на подложке, синий #002CF2 акцент */
+  --background: 40 20% 99%;         /* #FDFDFC */
+  --foreground: 0 0% 7%;
+  --card: 0 0% 100%;
+  --card-foreground: 0 0% 7%;
+  --card-border: 40 6% 92%;
+  --border: 40 6% 90%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 0 0% 7%;
+  --popover-border: 40 6% 90%;
+
+  --sidebar: 40 15% 97%;
+  --sidebar-foreground: 0 0% 7%;
+  --sidebar-border: 40 6% 90%;
+  --sidebar-primary: 231 99% 47%;   /* #002CF2 */
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 40 8% 93%;
+  --sidebar-accent-foreground: 0 0% 7%;
+  --sidebar-ring: 231 99% 47%;
+
+  --primary: 231 99% 47%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 40 8% 94%;
+  --secondary-foreground: 0 0% 7%;
+  --muted: 40 6% 95%;
+  --muted-foreground: 0 0% 40%;
+  --accent: 40 8% 93%;
+  --accent-foreground: 0 0% 7%;
+  --destructive: 0 84% 45%;
+  --destructive-foreground: 0 0% 100%;
+  --input: 40 8% 88%;
+  --ring: 231 99% 47%;
+
+  --chart-1: 231 99% 55%;
+  --chart-2: 189 95% 55%;
+  --chart-3: 173 58% 45%;
+  --chart-4: 43 74% 55%;
+  --chart-5: 27 87% 60%;
+
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Geist', 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-serif: Georgia, serif;
+  --font-mono: 'Geist Mono', 'JetBrains Mono', ui-monospace, monospace;
+  --radius: 0.75rem;
+
+  --shadow-2xs: 0px 2px 0px 0px hsl(0 0% 0% / 0);
+  --shadow-xs: 0px 2px 0px 0px hsl(0 0% 0% / 0);
+  --shadow-sm: 0px 2px 0px 0px hsl(0 0% 0% / 0), 0px 1px 2px -1px hsl(0 0% 0% / 0);
+  --shadow: 0px 2px 0px 0px hsl(0 0% 0% / 0), 0px 1px 2px -1px hsl(0 0% 0% / 0);
+  --shadow-md: 0px 2px 0px 0px hsl(0 0% 0% / 0), 0px 2px 4px -1px hsl(0 0% 0% / 0);
+  --shadow-lg: 0px 2px 0px 0px hsl(0 0% 0% / 0), 0px 4px 6px -1px hsl(0 0% 0% / 0);
+  --shadow-xl: 0px 2px 0px 0px hsl(0 0% 0% / 0), 0px 8px 10px -1px hsl(0 0% 0% / 0);
+  --shadow-2xl: 0px 2px 0px 0px hsl(0 0% 0% / 0);
+  --tracking-normal: 0em;
+  --spacing: 0.25rem;
+
+  --sidebar-primary-border: hsl(var(--sidebar-primary));
+  --sidebar-primary-border: hsl(from hsl(var(--sidebar-primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --sidebar-accent-border: hsl(var(--sidebar-accent));
+  --sidebar-accent-border: hsl(from hsl(var(--sidebar-accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --primary-border: hsl(var(--primary));
+  --primary-border: hsl(from hsl(var(--primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --secondary-border: hsl(var(--secondary));
+  --secondary-border: hsl(from hsl(var(--secondary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --muted-border: hsl(var(--muted));
+  --muted-border: hsl(from hsl(var(--muted)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --accent-border: hsl(var(--accent));
+  --accent-border: hsl(from hsl(var(--accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --destructive-border: hsl(var(--destructive));
+  --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+}
+
+/* Dark — основная тема, LiveKit style */
+.dark {
+  --button-outline: rgba(255, 255, 255, 0.08);
+  --badge-outline: rgba(255, 255, 255, 0.05);
+  --opaque-button-border-intensity: 9;
+  --elevate-1: rgba(255, 255, 255, 0.04);
+  --elevate-2: rgba(255, 255, 255, 0.08);
+
+  /* Near-black ground */
+  --background: 0 0% 2.75%;         /* #070707 */
+  --foreground: 0 0% 96%;
+  --card: 0 0% 5.5%;
+  --card-foreground: 0 0% 96%;
+  --card-border: 0 0% 12%;
+  --border: 0 0% 11%;
+
+  --popover: 0 0% 7%;
+  --popover-foreground: 0 0% 96%;
+  --popover-border: 0 0% 14%;
+
+  --sidebar: 0 0% 4%;
+  --sidebar-foreground: 0 0% 96%;
+  --sidebar-border: 0 0% 11%;
+  --sidebar-primary: 189 95% 55%;   /* #1FD5F9 */
+  --sidebar-primary-foreground: 0 0% 4%;
+  --sidebar-accent: 0 0% 10%;
+  --sidebar-accent-foreground: 0 0% 96%;
+  --sidebar-ring: 189 95% 55%;
+
+  /* Cyan accent — LiveKit brand */
+  --primary: 189 95% 55%;           /* #1FD5F9 */
+  --primary-foreground: 0 0% 4%;
+  --secondary: 0 0% 12%;
+  --secondary-foreground: 0 0% 96%;
+  --muted: 0 0% 10%;
+  --muted-foreground: 0 0% 60%;
+  --accent: 0 0% 12%;
+  --accent-foreground: 0 0% 96%;
+  --destructive: 0 84% 55%;
+  --destructive-foreground: 0 0% 100%;
+  --input: 0 0% 16%;
+  --ring: 189 95% 55%;
+
+  --chart-1: 189 95% 55%;
+  --chart-2: 231 99% 65%;
+  --chart-3: 173 58% 55%;
+  --chart-4: 43 74% 65%;
+  --chart-5: 27 87% 65%;
+
+  --shadow-2xs: 0px 2px 0px 0px hsl(0 0% 0% / 0);
+  --shadow-xs: 0px 2px 0px 0px hsl(0 0% 0% / 0);
+  --shadow-sm: 0px 2px 0px 0px hsl(0 0% 0% / 0), 0px 1px 2px -1px hsl(0 0% 0% / 0);
+  --shadow: 0px 2px 0px 0px hsl(0 0% 0% / 0), 0px 1px 2px -1px hsl(0 0% 0% / 0);
+  --shadow-md: 0px 2px 0px 0px hsl(0 0% 0% / 0), 0px 2px 4px -1px hsl(0 0% 0% / 0);
+  --shadow-lg: 0px 2px 0px 0px hsl(0 0% 0% / 0), 0px 4px 6px -1px hsl(0 0% 0% / 0);
+  --shadow-xl: 0px 2px 0px 0px hsl(0 0% 0% / 0), 0px 8px 10px -1px hsl(0 0% 0% / 0);
+  --shadow-2xl: 0px 2px 0px 0px hsl(0 0% 0% / 0);
+
+  --sidebar-primary-border: hsl(var(--sidebar-primary));
+  --sidebar-primary-border: hsl(from hsl(var(--sidebar-primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --sidebar-accent-border: hsl(var(--sidebar-accent));
+  --sidebar-accent-border: hsl(from hsl(var(--sidebar-accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --primary-border: hsl(var(--primary));
+  --primary-border: hsl(from hsl(var(--primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --secondary-border: hsl(var(--secondary));
+  --secondary-border: hsl(from hsl(var(--secondary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --muted-border: hsl(var(--muted));
+  --muted-border: hsl(from hsl(var(--muted)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --accent-border: hsl(var(--accent));
+  --accent-border: hsl(from hsl(var(--accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --destructive-border: hsl(var(--destructive));
+  --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html, body {
+    font-feature-settings: 'ss01' on, 'cv11' on;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply font-sans antialiased bg-background text-foreground;
+    letter-spacing: -0.005em;
+  }
+
+  h1, h2, h3, h4, .font-display {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+  }
+
+  /* Тонкая типографическая мелочь LiveKit-vibe: цифры табличные */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Пульсация индикатора "говорит" (в брендовом cyan) */
+  @keyframes speak-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 hsl(var(--primary) / 0.55); }
+    50% { box-shadow: 0 0 0 5px hsl(var(--primary) / 0); }
+  }
+
+  .speaking-ring {
+    animation: speak-pulse 1.2s ease-out infinite;
+  }
+
+  /* Тонкая cyan-подсветка на активных элементах */
+  .glow-primary {
+    box-shadow: 0 0 0 1px hsl(var(--primary) / 0.35), 0 0 24px -8px hsl(var(--primary) / 0.5);
+  }
+
+  /* Cyan амбиент-градиент (дисковый blob) */
+  .voice-ambient {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+  }
+  .voice-ambient::before {
+    content: '';
+    position: absolute;
+    inset: -20%;
+    background:
+      radial-gradient(60% 60% at 20% 30%, hsl(189 95% 55% / 0.10), transparent 60%),
+      radial-gradient(50% 50% at 85% 75%, hsl(231 99% 60% / 0.08), transparent 60%),
+      radial-gradient(40% 40% at 50% 100%, hsl(189 95% 55% / 0.06), transparent 60%);
+    filter: blur(20px);
+    z-index: -1;
+    pointer-events: none;
+  }
+
+  /* Карточка говорящего — контур + cyan glow + дышащий градиент внутри */
+  @keyframes voice-breathe {
+    0%, 100% { opacity: 0.45; }
+    50% { opacity: 0.85; }
+  }
+
+  .voice-card-speaking {
+    position: relative;
+    border-color: hsl(var(--primary) / 0.55);
+    box-shadow:
+      0 0 0 1px hsl(var(--primary) / 0.35),
+      0 8px 40px -12px hsl(var(--primary) / 0.4);
+  }
+  .voice-card-speaking::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: radial-gradient(80% 60% at 50% 100%, hsl(189 95% 55% / 0.18), transparent 70%);
+    animation: voice-breathe 2.4s ease-in-out infinite;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .voice-card-speaking > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Мини-эквалайзер (3 бара) */
+  @keyframes mini-bar-1 { 0%, 100% { height: 30%; } 50% { height: 100%; } }
+  @keyframes mini-bar-2 { 0%, 100% { height: 70%; } 50% { height: 40%; } }
+  @keyframes mini-bar-3 { 0%, 100% { height: 50%; } 50% { height: 90%; } }
+
+  .mini-bar-a { animation: mini-bar-1 0.85s ease-in-out infinite; }
+  .mini-bar-b { animation: mini-bar-2 0.75s ease-in-out infinite; }
+  .mini-bar-c { animation: mini-bar-3 0.95s ease-in-out infinite; }
+
+  /* Скроллбар в стиле LiveKit — тонкий, приглушённый */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground) / 0.5); }
+}
+
+@layer utilities {
+  input[type='search']::-webkit-search-cancel-button { @apply hidden; }
+  [contenteditable][data-placeholder]:empty::before {
+    content: attr(data-placeholder);
+    color: hsl(var(--muted-foreground));
+    pointer-events: none;
+  }
+  .no-default-hover-elevate {}
+  .no-default-active-elevate {}
+  .toggle-elevate::before,
+  .toggle-elevate-2::before {
+    content: '';
+    pointer-events: none;
+    position: absolute;
+    inset: 0px;
+    border-radius: inherit;
+    z-index: -1;
+  }
+  .toggle-elevate.toggle-elevated::before {
+    background-color: var(--elevate-2);
+  }
+  .border.toggle-elevate::before {
+    inset: -1px;
+  }
+  .hover-elevate:not(.no-default-hover-elevate),
+  .active-elevate:not(.no-default-active-elevate),
+  .hover-elevate-2:not(.no-default-hover-elevate),
+  .active-elevate-2:not(.no-default-active-elevate) {
+    position: relative;
+    z-index: 0;
+  }
+  .hover-elevate:not(.no-default-hover-elevate)::after,
+  .active-elevate:not(.no-default-active-elevate)::after,
+  .hover-elevate-2:not(.no-default-hover-elevate)::after,
+  .active-elevate-2:not(.no-default-active-elevate)::after {
+    content: '';
+    pointer-events: none;
+    position: absolute;
+    inset: 0px;
+    border-radius: inherit;
+    z-index: 1;
+  }
+  .hover-elevate:hover:not(.no-default-hover-elevate)::after,
+  .active-elevate:active:not(.no-default-active-elevate)::after {
+    background-color: var(--elevate-1);
+  }
+  .hover-elevate-2:hover:not(.no-default-hover-elevate)::after,
+  .active-elevate-2:active:not(.no-default-active-elevate)::after {
+    background-color: var(--elevate-2);
+  }
+  .border.hover-elevate:not(.no-hover-interaction-elevate)::after,
+  .border.active-elevate:not(.no-active-interaction-elevate)::after,
+  .border.hover-elevate-2:not(.no-hover-interaction-elevate)::after,
+  .border.active-elevate-2:not(.no-active-interaction-elevate)::after,
+  .border.hover-elevate:not(.no-hover-interaction-elevate)::after {
+    inset: -1px;
+  }
+}

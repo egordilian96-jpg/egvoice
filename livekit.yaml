@@ -1,0 +1,19 @@
+port: 7880
+bind_addresses:
+  - ""
+
+rtc:
+  tcp_port: 7881
+  port_range_start: 50000
+  port_range_end: 50100
+  use_external_ip: true
+
+# Ключи должны совпадать с LIVEKIT_API_KEY / LIVEKIT_API_SECRET в .env приложения.
+# Формат: <API_KEY>: <API_SECRET>. Секрет минимум 32 символа.
+keys:
+  devkey: devsecretdevsecretdevsecretdev12345
+
+logging:
+  level: info
+
+# Если поднимаешь несколько нод — включай Redis. Для MVP (одна нода) не нужен.
