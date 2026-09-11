@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'wouter';
+import { Link, useLocation } from 'wouter';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, Volume2, Hash, UserPlus, Mic, MicOff, Headphones, HeadphoneOff, Cog, Plus, LogOut } from 'lucide-react';
 import { UserAvatar } from './Avatar';
@@ -30,7 +30,13 @@ export function ChannelList({
   micMuted, outputMuted, onToggleMic, onToggleOutput,
 }: Props) {
   const { user, logout } = useAuth();
+  const [, setLocation] = useLocation();
   const [createOpen, setCreateOpen] = useState(false);
+
+  const handleLogout = () => {
+    logout();
+    setLocation('/login');
+  };
   const voiceChannels = channels.filter((c) => c.type === 'voice');
   const textChannels = channels.filter((c) => c.type === 'text');
 
@@ -125,7 +131,7 @@ export function ChannelList({
               </button>
             </Link>
             <button
-              onClick={logout}
+              onClick={handleLogout}
               className="hover-elevate rounded p-1.5 text-muted-foreground"
               title="Выйти"
               data-testid="button-logout"

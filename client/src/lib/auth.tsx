@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { api, getToken, setToken, type PublicUser } from './api';
 
 type AuthContextValue = {
@@ -14,6 +15,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<PublicUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const qc = useQueryClient();
 
   // При старте — если есть токен, тянем /me
   useEffect(() => {
@@ -43,6 +45,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     setToken(null);
     setUser(null);
+    // Полная чистка: react-query кэш + локальные ключи EG Voice.
+    // Так следующий вход не покажет чужие данные.
+    qc.clear();
+    try {
+      const keys = Object.keys(localStorage);
+      for (const k of keys) {
+        if (k.startsWith('egv.') && k !== 'egv.token') localStorage.removeItem(k);
+      }
+    } catch {}
   };
 
   return (

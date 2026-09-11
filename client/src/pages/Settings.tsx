@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Link } from 'wouter';
-import { ArrowLeft, Mic, Volume2, Keyboard, User, Palette, Sliders } from 'lucide-react';
+import { Link, useLocation } from 'wouter';
+import { ArrowLeft, Mic, Volume2, Keyboard, User, Palette, Sliders, LogOut } from 'lucide-react';
+import { useAuth } from '@/lib/auth';
 
 const SECTIONS = [
   { id: 'audio', label: 'Голос и звук', icon: Mic },
@@ -14,6 +15,13 @@ type SectionId = (typeof SECTIONS)[number]['id'];
 
 export default function Settings() {
   const [section, setSection] = useState<SectionId>('audio');
+  const { logout } = useAuth();
+  const [, setLocation] = useLocation();
+
+  const handleLogout = () => {
+    logout();
+    setLocation('/login');
+  };
 
   return (
     <div className="h-screen w-screen flex bg-background text-foreground">
@@ -48,7 +56,7 @@ export default function Settings() {
         <div className="max-w-2xl mx-auto p-8">
           {section === 'audio' && <AudioSettings />}
           {section === 'keys' && <KeysSettings />}
-          {section === 'profile' && <ProfileSettings />}
+          {section === 'profile' && <ProfileSettings onLogout={handleLogout} />}
           {section === 'appearance' && <AppearanceSettings />}
           {section === 'advanced' && <AdvancedSettings />}
         </div>
@@ -247,7 +255,7 @@ function KeyInput({ value, onChange, testId }: { value: string; onChange: (v: st
   );
 }
 
-function ProfileSettings() {
+function ProfileSettings({ onLogout }: { onLogout: () => void }) {
   const [nick, setNick] = useState('egor');
   return (
     <>
@@ -268,9 +276,14 @@ function ProfileSettings() {
         <button className="bg-secondary hover-elevate rounded px-3 py-1.5 text-sm" data-testid="button-change-password">Открыть</button>
       </Row>
       <Row label="Выйти">
-        <Link href="/login">
-          <button className="text-destructive hover:underline text-sm font-semibold" data-testid="button-logout">Выйти из аккаунта</button>
-        </Link>
+        <button
+          onClick={onLogout}
+          className="inline-flex items-center gap-1.5 text-destructive hover:underline text-sm font-semibold"
+          data-testid="button-logout"
+        >
+          <LogOut className="w-3.5 h-3.5" />
+          Выйти из аккаунта
+        </button>
       </Row>
     </>
   );

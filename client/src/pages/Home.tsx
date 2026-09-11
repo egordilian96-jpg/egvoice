@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocation } from 'wouter';
+import { Server as ServerIcon, Hash, Users } from 'lucide-react';
 import { ServerList } from '@/components/ServerList';
 import { ChannelList } from '@/components/ChannelList';
 import { ChatArea } from '@/components/ChatArea';
@@ -18,6 +19,18 @@ export default function Home() {
   const [activeServerId, setActiveServerId] = useState<string | null>(null);
   const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
+
+  // Мобильная навигация (<md: 768px — показываем одну панель)
+  type MobilePane = 'servers' | 'chat' | 'members';
+  const [mobilePane, setMobilePane] = useState<MobilePane>('servers');
+
+  // При выборе канала в мобильной панели — переключаемся на чат
+  const handleMobileSelectChannel = (c: Channel) => {
+    setActiveChannel(c);
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      setMobilePane('chat');
+    }
+  };
 
   const voice = useVoice();
   useRemoteAudioPlayback(voice.room);
@@ -107,22 +120,21 @@ export default function Home() {
   const noServers = servers.length === 0;
 
   return (
-    <div className="h-screen w-screen flex overflow-hidden bg-background text-foreground">
-      <ServerList servers={servers} activeServerId={activeServerId} onSelect={(id) => {
-        setActiveServerId(id);
-        setActiveChannel(null);
-      }} />
-      {noServers ? (
-        <EmptyState />
-      ) : (
-        <>
+    <div className="h-[100dvh] w-screen flex flex-col md:flex-row overflow-hidden bg-background text-foreground">
+      {/* Колонка 1: серверы + каналы (на мобильном — показываем когда pane=servers) */}
+      <div className={`${mobilePane === 'servers' ? 'flex' : 'hidden'} md:flex flex-1 md:flex-none min-h-0`}>
+        <ServerList servers={servers} activeServerId={activeServerId} onSelect={(id) => {
+          setActiveServerId(id);
+          setActiveChannel(null);
+        }} />
+        {!noServers && (
           <ChannelList
             server={activeServer}
             channels={channels}
             activeChannelId={activeChannel?.id ?? null}
             connectedChannelId={voice.connectedChannelId}
             voiceParticipants={voice.participants}
-            onSelectChannel={setActiveChannel}
+            onSelectChannel={handleMobileSelectChannel}
             onJoinVoice={(id) => voice.joinChannel(id)}
             onOpenInvite={() => setInviteOpen(true)}
             micMuted={voice.micMuted}
@@ -130,6 +142,17 @@ export default function Home() {
             onToggleMic={voice.toggleMic}
             onToggleOutput={voice.toggleOutput}
           />
+        )}
+        {noServers && (
+          <div className="flex-1 md:flex-none md:hidden">
+            <EmptyState />
+          </div>
+        )}
+      </div>
+
+      {/* Колонка 2: чат (на мобильном — pane=chat) */}
+      {!noServers ? (
+        <div className={`${mobilePane === 'chat' ? 'flex' : 'hidden'} md:flex flex-1 min-h-0`}>
           <ChatArea
             channel={activeChannel}
             connectedChannelId={voice.connectedChannelId}
@@ -142,8 +165,27 @@ export default function Home() {
             micMuted={voice.micMuted}
             onToggleMic={voice.toggleMic}
           />
+        </div>
+      ) : (
+        <div className="hidden md:flex flex-1">
+          <EmptyState />
+        </div>
+      )}
+
+      {/* Колонка 3: участники (на мобильном — pane=members) */}
+      {!noServers && (
+        <div className={`${mobilePane === 'members' ? 'flex' : 'hidden'} md:flex flex-1 md:flex-none min-h-0`}>
           <MembersSidebar serverId={activeServerId} />
-        </>
+        </div>
+      )}
+
+      {/* Мобильный tab-bar (только <md) */}
+      {!noServers && (
+        <nav className="md:hidden shrink-0 flex border-t border-sidebar-border/60 bg-sidebar">
+          <MobileTab active={mobilePane === 'servers'} onClick={() => setMobilePane('servers')} icon={Hash} label="Каналы" />
+          <MobileTab active={mobilePane === 'chat'} onClick={() => setMobilePane('chat')} icon={ServerIcon} label="Чат" disabled={!activeChannel} />
+          <MobileTab active={mobilePane === 'members'} onClick={() => setMobilePane('members')} icon={Users} label="Люди" />
+        </nav>
       )}
 
       {activeServer && (
@@ -156,6 +198,24 @@ export default function Home() {
       )}
 
     </div>
+  );
+}
+
+function MobileTab({
+  active, onClick, icon: Icon, label, disabled,
+}: { active: boolean; onClick: () => void; icon: React.ComponentType<{ className?: string }>; label: string; disabled?: boolean }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`flex-1 py-2.5 flex flex-col items-center gap-0.5 text-[11px] font-medium transition-colors ${
+        active ? 'text-primary' : 'text-muted-foreground'
+      } ${disabled ? 'opacity-40 cursor-not-allowed' : 'hover-elevate'}`}
+      data-testid={`mobile-tab-${label}`}
+    >
+      <Icon className="w-5 h-5" />
+      {label}
+    </button>
   );
 }
 

@@ -45,6 +45,7 @@ export default function Login() {
             data-testid="input-email"
             required
             autoComplete="email"
+            autoFocus
           />
         </Field>
         <Field label="Пароль">

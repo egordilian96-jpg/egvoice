@@ -1,41 +1,22 @@
-# dependencies
 node_modules/
-.pnp
-.pnp.js
-
-# build
 dist/
-build/
-*.tsbuildinfo
+.vite/
 
-# env
+# SQLite database files — never commit; exposes demo data at rest
+data.db
+data.db-shm
+data.db-wal
+data.db-journal
+
 .env
-.env.local
-.env.*.local
+.env.*
 !.env.example
+!.env.production.example
 
-# runtime data
-data/
-*.db
-*.db-journal
-*.sqlite
-*.sqlite-journal
-
-# logs
-logs/
 *.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-
-# editor & OS
-.vscode/
-.idea/
-*.swp
 .DS_Store
-Thumbs.db
 
-# misc
-.turbo/
-coverage/
+# Rust / Tauri build artefacts
+src-tauri/target/
+src-tauri/gen/
+src-tauri/Cargo.lock

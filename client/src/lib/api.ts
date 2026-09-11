@@ -1,10 +1,24 @@
 // Простой fetch-обёрточный клиент. Токен читаем/пишем в localStorage.
 
-// В превью-сборке (deploy_website) этот плейсхолдер будет заменён
-// на прокси-URL до нашего sandbox-бэка (port 5000). В самохосте (docker) плейсхолдер
-// останется как есть — тогда API_BASE = '' и запросы идут на тот же origin.
+// Куда стучаться:
+// - в Tauri-сборке стоит VITE_API_URL на прод-URL (берётся из .env.production)
+// - в превью-сборке (deploy_website) плейсхолдер __PORT_5000__ заменяется на прокси
+// - в самохосте (docker) API_BASE = '' и запросы идут на тот же origin
 const API_PLACEHOLDER = '__PORT_5000__';
-export const API_BASE = API_PLACEHOLDER.startsWith('__') ? '' : API_PLACEHOLDER;
+const FROM_ENV = (import.meta.env.VITE_API_URL as string | undefined) ?? '';
+export const API_BASE = FROM_ENV
+  ? FROM_ENV.replace(/\/$/, '')
+  : (API_PLACEHOLDER.startsWith('__') ? '' : API_PLACEHOLDER);
+
+// WS URL — от того же API_BASE, только схема http(s) -> ws(s)
+export function getWsUrl(path: string): string {
+  if (API_BASE) {
+    return API_BASE.replace(/^http/, 'ws') + path;
+  }
+  // Относительный — от текущего origin
+  const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  return `${proto}://${window.location.host}${path}`;
+}
 
 const TOKEN_KEY = 'egv.token';
 

@@ -1,0 +1,24 @@
+[package]
+name = "eg-voice"
+version = "0.1.0"
+description = "EG Voice — голосовой мессенджер для геймеров"
+authors = ["Egor Dilian <egordilian96@gmail.com>"]
+edition = "2021"
+rust-version = "1.75"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+tauri-plugin-updater = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

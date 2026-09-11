@@ -47,6 +47,7 @@ export default function Register() {
             data-testid="input-email"
             required
             autoComplete="email"
+            autoFocus
           />
         </Field>
         <Field label="Ник">
