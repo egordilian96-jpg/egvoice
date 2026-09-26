@@ -5,7 +5,7 @@ export const RoomEvent = Object.fromEntries([
   'ParticipantConnected', 'ParticipantDisconnected', 'TrackMuted', 'TrackUnmuted', 'ActiveSpeakersChanged',
   'LocalTrackPublished', 'LocalTrackUnpublished', 'TrackSubscribed', 'TrackUnsubscribed',
   'AudioPlaybackStatusChanged', 'Reconnecting', 'Reconnected', 'Disconnected',
-  'ConnectionQualityChanged',
+  'ConnectionQualityChanged', 'SignalConnected',
 ].map(k => [k, k]));
 export class LocalAudioTrack {
   kind = 'audio'; isMuted = false;

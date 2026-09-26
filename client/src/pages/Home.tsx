@@ -153,6 +153,7 @@ export default function Home() {
             onLeaveVoice={voice.leave}
             micMuted={voice.micMuted}
             onToggleMic={voice.toggleMic}
+            onOpenInvite={() => setInviteOpen(true)}
           />
         </div>
       ) : (

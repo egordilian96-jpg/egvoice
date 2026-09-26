@@ -20,6 +20,7 @@ export class VoiceEngine {
   private epoch = 0;
   private captureEpoch = 0;
   private capture: Capture | null = null;
+  private pendingCapture: Capture | null = null;
   private ptt = false;
   private silenceSince = 0;
   private suppressUntil = 0;
@@ -29,6 +30,7 @@ export class VoiceEngine {
   private diagnosticStart = 0;
   private diagnosticEvents: string[] = [];
   private rtcMonitor: ReturnType<typeof monitorRtcTransport> | null = null;
+  private reconnectTimer: ReturnType<typeof setTimeout> | undefined;
   state = {
     room: null as Room | null, connectedChannelId: null as string | null, targetChannelId: null as string | null,
     participants: [] as VoiceParticipant[], micMuted: false, outputMuted: false, connecting: false,
@@ -38,6 +40,7 @@ export class VoiceEngine {
     noSignal: false, deviceLost: false, listenOnly: false, audioBlocked: false, processingPaused: false,
     storageWarning: false, testing: false,
     voiceStep: 'idle' as VoiceStep, diagnostic: '', publicationFailed: false,
+    participantVolumes: {} as Record<string, number>,
   };
   subscribe = (fn: () => void) => { this.listeners.add(fn); return () => { this.listeners.delete(fn); }; };
   snapshot = () => this.state;
@@ -48,7 +51,7 @@ export class VoiceEngine {
   }
   private step(value: VoiceStep) {
     this.diagnosticEvents.push(`${Math.round(performance.now() - this.diagnosticStart)}ms ${value}`);
-    this.diagnosticEvents = this.diagnosticEvents.slice(-12);
+    this.diagnosticEvents = this.diagnosticEvents.slice(-24);
     this.emit({ voiceStep: value });
   }
   private async failure(err: unknown) {
@@ -57,12 +60,22 @@ export class VoiceEngine {
     const rtc = await this.rtcMonitor?.summary() ?? [];
     if (epoch !== this.epoch || captureEpoch !== this.captureEpoch) return;
     this.emit({ diagnostic: [
-      'EG Voice 0.2.3',
+      'EG Voice 0.2.4',
       `route=${this.state.settings.networkMode}`,
       `connection=${this.state.settings.connectionMode}`,
       ...trace, ...rtc,
       safeVoiceError(err),
     ].join('\n') });
+  }
+  private async endFailed(err: unknown, message: string) {
+    const epoch = this.epoch;
+    // Close the gate immediately; collect evidence before destroying the room.
+    this.emit({ phase: 'failed', transmitting: false }); this.applyGate();
+    await this.failure(err);
+    if (epoch !== this.epoch) return;
+    const channel = this.state.connectedChannelId || this.state.targetChannelId;
+    void this.leave();
+    this.emit({ phase: 'failed', targetChannelId: channel, error: message });
   }
   start() {
     this.disposed = false;
@@ -204,15 +217,16 @@ export class VoiceEngine {
     });
     this.rebuild();
   }
-  private async acquire(settings: VoiceSettings) {
+  private async acquire(settings: VoiceSettings, resetDiagnostic = true) {
     if (this.state.deviceBusy) return false;
     const operation = ++this.captureEpoch, epoch = this.epoch, room = this.state.room;
-    this.diagnosticStart = performance.now(); this.diagnosticEvents = [];
+    if (resetDiagnostic) { this.diagnosticStart = performance.now(); this.diagnosticEvents = []; }
     this.emit({ deviceBusy: true, error: null, noSignal: false, diagnostic: '', publicationFailed: false }); this.applyGate();
     let c: Capture | null = null;
     try {
       c = await this.buildCapture(settings);
       if (operation !== this.captureEpoch || epoch !== this.epoch || this.disposed) { this.closeCapture(c); return false; }
+      this.pendingCapture = c;
       const previous = this.capture;
       // Do not publish a second microphone. Gate is closed until commit succeeds.
       if (room) {
@@ -244,11 +258,16 @@ export class VoiceEngine {
       // A failed replacement never silently returns to an unpublished microphone.
       this.closeCapture(this.capture); this.capture = null;
       const publicationFailed = this.state.voiceStep === 'publish';
+      if (publicationFailed && this.state.phase === 'reconnecting') {
+        await this.endFailed(err, 'Связь с голосовым сервером оборвалась во время отправки звука. Микрофон закрыт. Чат остаётся доступен.');
+        return false;
+      }
       await this.failure(err);
       if (epoch !== this.epoch || operation !== this.captureEpoch) return false;
       this.emit({ error: publicationFailed ? publishErrorText() : `${mediaError(err)}${room ? ' Канал открыт в режиме слушателя.' : ''}`, publicationFailed, listenOnly: !!room, transmitting: false });
       return false;
     } finally {
+      if (this.pendingCapture === c) this.pendingCapture = null;
       if (epoch === this.epoch && operation === this.captureEpoch) {
         this.emit({ deviceBusy: false }); this.applyGate(); this.syncMute();
       }
@@ -289,6 +308,12 @@ export class VoiceEngine {
     await this.leave();
     await this.joinChannel(channel);
   };
+  retry = async () => {
+    const channel = this.state.connectedChannelId || this.state.targetChannelId;
+    if (!channel || this.state.connecting || this.state.deviceBusy) return;
+    await this.leave();
+    await this.joinChannel(channel);
+  };
   joinChannel = async (channelId: string) => {
     if (this.state.connecting || this.state.connectedChannelId === channelId) return;
     await this.leave();
@@ -311,7 +336,7 @@ export class VoiceEngine {
       });
       if (epoch !== this.epoch || this.disposed) { await r.disconnect(); return; }
       this.emit({ phase: 'connected', connectedChannelId: channelId });
-      await this.acquire(this.state.settings);
+      await this.acquire(this.state.settings, false);
       this.rebuild();
     } catch (err) {
       if (epoch === this.epoch) {
@@ -325,9 +350,11 @@ export class VoiceEngine {
     } finally { if (epoch === this.epoch) this.emit({ connecting: false }); }
   };
   leave = async () => {
+    clearTimeout(this.reconnectTimer); this.reconnectTimer = undefined;
     ++this.epoch; ++this.captureEpoch;
     const r = this.state.room;
     const monitor = this.rtcMonitor; this.rtcMonitor = null; monitor?.stop();
+    this.closeCapture(this.pendingCapture); this.pendingCapture = null;
     this.ptt = false; this.testing = false; this.silenceSince = 0;
     this.closeCapture(this.capture); this.capture = null; this.clearAudio();
     this.emit({ room: null, connectedChannelId: null, targetChannelId: null, participants: [], connecting: false,
@@ -338,13 +365,19 @@ export class VoiceEngine {
   };
   private wire(r: Room, epoch: number) {
     const current = () => epoch === this.epoch && r === this.state.room;
+    const event = (name: string) => {
+      this.diagnosticEvents.push(`${Math.round(performance.now() - this.diagnosticStart)}ms ${name}`);
+      this.diagnosticEvents = this.diagnosticEvents.slice(-24);
+    };
+    r.on(RoomEvent.SignalConnected, () => { if (current()) event('signal-connected'); });
     const refresh = () => { if (current()) this.rebuild(); };
     [RoomEvent.ParticipantConnected, RoomEvent.ParticipantDisconnected, RoomEvent.TrackMuted, RoomEvent.TrackUnmuted,
       RoomEvent.ActiveSpeakersChanged, RoomEvent.LocalTrackPublished, RoomEvent.LocalTrackUnpublished, RoomEvent.ConnectionQualityChanged].forEach(ev => r.on(ev, refresh));
-    r.on(RoomEvent.TrackSubscribed, track => {
+    r.on(RoomEvent.TrackSubscribed, (track, _publication, participant) => {
       if (!current() || track.kind !== Track.Kind.Audio) return;
       const t = track as RemoteAudioTrack, el = t.attach();
-      el.muted = this.state.outputMuted; el.style.display = 'none'; document.body.appendChild(el);
+      el.muted = this.state.outputMuted; el.volume = this.state.participantVolumes[participant?.identity] ?? 1;
+      el.style.display = 'none'; document.body.appendChild(el);
       this.audio.set(t, el);
       void el.play().catch(() => { if (current()) this.emit({ audioBlocked: true }); }); refresh();
     });
@@ -355,16 +388,25 @@ export class VoiceEngine {
     r.on(RoomEvent.AudioPlaybackStatusChanged, () => { if (current()) this.emit({ audioBlocked: !r.canPlaybackAudio }); });
     r.on(RoomEvent.Reconnecting, () => {
       if (!current()) return;
+      event('reconnecting');
       this.emit({ phase: 'reconnecting', noSignal: false, transmitting: false }); this.releasePtt();
+      // Do not reset the deadline for repeated SDK reconnect notifications.
+      if (!this.reconnectTimer) this.reconnectTimer = setTimeout(() => {
+        this.reconnectTimer = undefined;
+        if (current()) void this.endFailed(new Error('Reconnect deadline exceeded (20s)'),
+          'Не удалось восстановить голос за 20 секунд. Микрофон закрыт. Можно повторить подключение или продолжить в текстовом чате.');
+      }, 20_000);
     });
     r.on(RoomEvent.Reconnected, () => {
       if (!current()) return;
+      event('reconnected');
+      clearTimeout(this.reconnectTimer); this.reconnectTimer = undefined;
       this.silenceSince = 0; this.emit({ phase: 'connected' }); this.applyGate(); refresh();
     });
     r.on(RoomEvent.Disconnected, () => {
       if (!current()) return;
-      void this.leave();
-      this.emit({ phase: 'failed', error: 'Голосовое соединение завершено. Нажми «Подключиться», чтобы повторить.' });
+      event('disconnected');
+      void this.endFailed(new Error('Voice room disconnected'), 'Голосовое соединение завершено. Микрофон закрыт. Нажми «Повторить подключение», чтобы вернуться.');
     });
   }
   private rebuild() {
@@ -406,6 +448,14 @@ export class VoiceEngine {
     this.ptt = false; this.emit({ outputMuted: !this.state.outputMuted });
     this.audio.forEach(el => { el.muted = this.state.outputMuted; });
     this.applyGate(); void this.syncMute();
+  };
+  setParticipantVolume = (identity: string, volume: number) => {
+    const value = Math.max(0, Math.min(1, Number.isFinite(volume) ? volume : 1));
+    this.emit({ participantVolumes: { ...this.state.participantVolumes, [identity]: value } });
+    const participant = this.state.room?.remoteParticipants.get(identity);
+    const track = participant?.getTrackPublication(Track.Source.Microphone)?.track as RemoteAudioTrack | undefined;
+    const el = track && this.audio.get(track);
+    if (el) el.volume = value;
   };
   private clearAudio() {
     this.audio.forEach((el, track) => { track.detach(el); el.pause(); el.remove(); }); this.audio.clear();

@@ -2,20 +2,28 @@ import { useQuery } from '@tanstack/react-query';
 import { UserAvatar } from './Avatar';
 import type { Member } from '@/lib/api';
 import { isOnline } from '@/lib/format';
+import { useVoice } from '@/lib/voice';
+import { useAuth } from '@/lib/auth';
 
 export function MembersSidebar({ serverId }: { serverId: string | null }) {
-  const { data } = useQuery<{ members: Member[] }>({
+  const voice = useVoice();
+  const { user } = useAuth();
+  const { data, isLoading, isError, refetch } = useQuery<{ members: Member[] }>({
     queryKey: [`/api/servers/${serverId}/members`],
     enabled: !!serverId,
+    refetchInterval: 10000,
   });
   const members = data?.members ?? [];
-  const online = members.filter((m) => isOnline(m.lastSeenAt));
-  const offline = members.filter((m) => !isOnline(m.lastSeenAt));
+  const isPresent = (m: Member) => m.id === user?.id || voice.participants.some(p => p.identity === m.id) || isOnline(m.lastSeenAt);
+  const online = members.filter(isPresent);
+  const offline = members.filter(m => !isPresent(m));
 
   if (!serverId) return null;
 
   return (
-    <aside className="w-60 shrink-0 hidden lg:flex flex-col bg-card border-l border-border/60 overflow-y-auto py-3">
+    <aside className="w-full md:w-[232px] shrink-0 flex flex-col bg-card border-l border-border/60 overflow-y-auto py-3">
+      {isLoading && <p className="px-4 text-xs text-muted-foreground">Загружаем участников…</p>}
+      {isError && <div className="px-4 text-xs">Не удалось обновить участников. <button className="text-primary" onClick={() => void refetch()}>Повторить</button></div>}
       {online.length > 0 && (
         <Group title={`Онлайн — ${online.length}`}>
           {online.map((u) => <MemberRow key={u.id} user={u} online />)}
@@ -26,7 +34,7 @@ export function MembersSidebar({ serverId }: { serverId: string | null }) {
           {offline.map((u) => <MemberRow key={u.id} user={u} muted />)}
         </Group>
       )}
-      {members.length === 0 && (
+      {!isLoading && !isError && members.length === 0 && (
         <div className="px-4 text-xs text-muted-foreground">Пока никого — пригласи друзей ссылкой.</div>
       )}
     </aside>

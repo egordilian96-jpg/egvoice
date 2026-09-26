@@ -47,7 +47,9 @@ export function MicModeControl({ compact = false }: { compact?: boolean }) {
 export function VoiceNotice() {
   const v = useVoice();
   const { toast } = useToast();
-  const title = v.deviceLost ? 'Микрофон отключён'
+  const title = v.phase === 'failed' ? 'Голосовое соединение прервано'
+    : v.publicationFailed ? 'Не удалось отправить звук'
+    : v.deviceLost ? 'Микрофон отключён'
     : v.processingPaused ? 'Обработка звука приостановлена'
     : v.audioBlocked ? 'Нажми, чтобы услышать друзей'
     : v.noSignal ? 'Тебя не слышно? Проверь микрофон'
@@ -59,17 +61,20 @@ export function VoiceNotice() {
     <div className="flex gap-2"><AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-amber-300" /><div className="min-w-0">
       <h3 className="font-semibold">{title}</h3>
       <p className="text-xs text-muted-foreground mt-1">
-        {v.deviceLost ? 'Не переключаем вход молча. Подключи гарнитуру или выбери другой микрофон. Друзей по-прежнему можно слушать.'
+        {v.phase === 'failed' || v.publicationFailed ? v.error
+          : v.deviceLost ? 'Не переключаем вход молча. Подключи гарнитуру или выбери другой микрофон.'
           : v.noSignal ? `От «${v.inputLabel}» почти нет сигнала 30 секунд. Возможно, ты просто молчишь. Скажи пару слов и проверь индикатор; это не подтверждение, что друзья тебя не слышат.`
-          : v.phase === 'reconnecting' ? 'Микрофон временно закрыт. Не нажимай «Подключиться» повторно.'
+          : v.phase === 'reconnecting' ? 'Микрофон временно закрыт. Пробуем восстановить связь не дольше 20 секунд; ты можешь выйти из голоса.'
           : v.audioBlocked || v.processingPaused ? 'Браузер приостановил звук. Возобнови его явным нажатием.'
           : v.error || 'Микрофон пока не опубликован. Проверь разрешения и устройство.'}
       </p>
       <div className="flex flex-wrap gap-2 mt-3">
+        {v.phase === 'failed' && <button className={button} onClick={() => void v.engine.retry()}>Повторить подключение</button>}
         {v.error && ['publish', 'connect'].includes(v.voiceStep) && (v.settings.networkMode !== 'relay-tcp' || v.settings.connectionMode !== 'compatible') &&
           <button className={button} disabled={v.connecting || v.deviceBusy} onClick={() => void v.engine.retryCompatibleTcp()}>Совместимое + TCP/TLS</button>}
         {v.publicationFailed && v.settings.networkMode !== 'relay' && <button className={button} disabled={v.connecting || v.deviceBusy} onClick={() => void v.engine.retryWithRelay()}>Переподключиться через TURN</button>}
-        {(v.deviceLost || v.listenOnly) && <button className={button} disabled={v.deviceBusy} onClick={() => void v.engine.requestMicrophone()}>Повторить с этим микрофоном</button>}
+        {(v.deviceLost || v.listenOnly) && !v.publicationFailed && <button className={button} disabled={v.deviceBusy || v.phase === 'reconnecting'} onClick={() => void v.engine.requestMicrophone()}>Повторить с этим микрофоном</button>}
+        {v.publicationFailed && <button className={button} disabled={v.deviceBusy || v.connecting} onClick={() => void v.engine.retry()}>Повторить подключение</button>}
         {(v.audioBlocked || v.processingPaused) && <button className={button} onClick={() => void v.engine.resumeAudio()}>Включить звук</button>}
         {v.noSignal && <button className={button} onClick={v.engine.dismissNoSignal}>Я просто молчу</button>}
         <Link href="/settings"><button className={button}>Проверить устройства</button></Link>
@@ -89,9 +94,9 @@ export function VoiceNotice() {
 export function VoiceToolbar() {
   const v = useVoice();
   if (!v.room && !v.connecting) return null;
-  return <div className="border-t border-border bg-card px-3 py-3 flex flex-wrap items-center gap-3 shrink-0" data-testid="voice-toolbar">
-    <div className="mr-auto">
-      <div className="text-xs font-semibold text-primary">{v.phase === 'reconnecting' ? 'Переподключаемся…' : v.connecting || v.deviceBusy ? STEP_LABELS[v.voiceStep] || 'Подключаемся…' : 'Голос подключён'}</div>
+  return <div className="lab-voice-toolbar" data-testid="voice-toolbar">
+    <div className="lab-call-status">
+      <div className="text-xs font-semibold text-primary">{v.phase === 'reconnecting' ? 'Переподключаемся…' : v.connecting || v.deviceBusy ? STEP_LABELS[v.voiceStep] || 'Подключаемся…' : v.publicationFailed ? 'Передача недоступна' : v.listenOnly ? 'Режим слушателя' : 'Голос подключён'}</div>
       <div className="text-xs text-muted-foreground">{v.outputMuted ? 'Звук и микрофон выключены' : v.micMuted ? 'Микрофон выключен' : v.transmitting ? 'Передача открыта' : 'Передача закрыта'}</div>
     </div>
     <MicModeControl compact />
@@ -102,10 +107,10 @@ export function VoiceToolbar() {
       onKeyDown={e => { if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) { e.preventDefault(); v.engine.pressPtt(); } }}
       onKeyUp={() => { if (v.settings.pttKind === 'hold') v.engine.releasePtt(); }}>
       {v.settings.pttKind === 'hold' ? 'Держи V / эту кнопку' : 'V: вкл / выкл'}</button>}
-    <button className={button} onClick={v.toggleMic} disabled={v.outputMuted || v.deviceBusy} aria-label="Микрофон" aria-pressed={v.micMuted}>{v.micMuted ? <MicOff size={16} /> : <Mic size={16} />}</button>
-    <button className={button} onClick={v.toggleOutput} aria-label="Выключить звук и микрофон" aria-pressed={v.outputMuted}><Headphones size={16} /></button>
-    <Link href="/settings"><button className={button} aria-label="Настройки голоса"><Settings size={16} /></button></Link>
-    <button className={`${button} text-destructive`} onClick={() => void v.leave()} aria-label={v.connecting ? 'Отменить подключение' : 'Выйти из голоса'}><PhoneOff size={16} /></button>
+    <button className="lab-call-button" onClick={v.toggleMic} disabled={v.outputMuted || v.deviceBusy || v.phase !== 'connected' || v.publicationFailed} aria-label="Микрофон" aria-pressed={v.micMuted}>{v.micMuted ? <MicOff size={16} /> : <Mic size={16} />}<span>{v.micMuted ? 'Микрофон выкл' : 'Микрофон'}</span><kbd>M</kbd></button>
+    <button className="lab-call-button" onClick={v.toggleOutput} aria-label="Выключить звук и микрофон" aria-pressed={v.outputMuted}><Headphones size={16} /><span>{v.outputMuted ? 'Звук выкл' : 'Звук'}</span></button>
+    <Link href="/settings" className="lab-call-button" aria-label="Настройки голоса"><Settings size={16} /><span>Настройки</span></Link>
+    <button className="lab-call-button hang" onClick={() => void v.leave()} aria-label={v.connecting ? 'Отменить подключение' : 'Выйти из голоса'}><PhoneOff size={16} /><span>Выйти</span></button>
   </div>;
 }
 export function LiveAudioSettings() {

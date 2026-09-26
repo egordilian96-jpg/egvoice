@@ -18,6 +18,7 @@ export function InviteDialog({ open, onClose, serverId, serverName }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [code, setCode] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
+  const [expiresAt, setExpiresAt] = useState<string | null>(null);
   const { toast } = useToast();
 
   // Never use window.location.origin: in Tauri it is a local WebView address.
@@ -28,10 +29,11 @@ export function InviteDialog({ open, onClose, serverId, serverName }: Props) {
     let active = true;
     setCopied(false);
     setCode(null);
+    setExpiresAt(null);
     setError(null);
     setLoading(true);
     api.post<{ code: string; expiresAt: string }>(`/api/servers/${serverId}/invites`, {})
-      .then((r) => { if (active) setCode(r.code); })
+      .then((r) => { if (active) { setCode(r.code); setExpiresAt(r.expiresAt); } })
       .catch((err) => { if (active) setError(err instanceof ApiError ? err.message : 'Не удалось создать ссылку. Проверь подключение и повтори.'); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
@@ -48,7 +50,7 @@ export function InviteDialog({ open, onClose, serverId, serverName }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent>
+      <DialogContent className="rounded-2xl border-border/60 bg-card sm:max-w-[520px] p-7">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <UserPlus className="w-5 h-5 text-primary" />
@@ -91,7 +93,8 @@ export function InviteDialog({ open, onClose, serverId, serverName }: Props) {
             </div>
           ) : null}
           <div className="text-xs text-muted-foreground">
-            Приглашение действует 24 часа. Делись только с друзьями. После входа выберите один и тот же голосовой канал, например «общий».
+            {expiresAt && Number.isFinite(Date.parse(expiresAt)) ? `Действует до ${new Date(expiresAt).toLocaleString('ru-RU')}. ` : 'Срок приглашения задаёт сервер. '}
+            Делись только с друзьями. После входа выберите один и тот же голосовой канал; микрофон не включится сам.
           </div>
         </div>
       </DialogContent>

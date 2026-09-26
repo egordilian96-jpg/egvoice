@@ -9,6 +9,7 @@ import type { VoiceParticipant } from '@/lib/voice';
 import { formatTime } from '@/lib/format';
 import { VoiceNotice, VoiceToolbar } from './VoiceControls';
 import { sessionStore } from '@/lib/storage';
+import { VoiceStage } from './VoiceStage';
 
 type Props = {
   channel: Channel | null;
@@ -21,11 +22,12 @@ type Props = {
   onLeaveVoice: () => void;
   micMuted: boolean;
   onToggleMic: () => void;
+  onOpenInvite?: () => void;
 };
 
 export function ChatArea({
   channel, connectedChannelId, voiceParticipants, connecting, voiceError, onDismissVoiceError,
-  onJoinVoice, onLeaveVoice, micMuted, onToggleMic,
+  onJoinVoice, onLeaveVoice, micMuted, onToggleMic, onOpenInvite,
 }: Props) {
   if (!channel) {
     return (
@@ -63,18 +65,7 @@ export function ChatArea({
       {channel.type === 'text'
         ? <TextChannel key={channel.id} channel={channel} />
         : (
-          <VoiceRoom
-            channel={channel}
-            isConnectedHere={connectedChannelId === channel.id}
-            connecting={connecting && connectedChannelId !== channel.id}
-            participants={connectedChannelId === channel.id ? voiceParticipants : []}
-            voiceError={null}
-            onDismissVoiceError={onDismissVoiceError}
-            onJoin={() => onJoinVoice(channel.id)}
-            onLeave={onLeaveVoice}
-            micMuted={micMuted}
-            onToggleMic={onToggleMic}
-          />
+          <VoiceStage channel={channel} onInvite={onOpenInvite} />
         )
       }
 

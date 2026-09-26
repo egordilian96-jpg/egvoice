@@ -40,7 +40,7 @@ const api = 'https://egvoice.pplx.app/port/5000';
       await page.locator('h2:visible').filter({ hasText: 'Создай первый сервер' }).waitFor();
       return { page, token: auth.token };
     }
-    const a = await user('Браузер QA один'), b = await user('Браузер QA два');
+    const a = await user('Браузер_QA_один'), b = await user('Браузер_QA_два');
     await a.page.locator('input[placeholder="Имя сервера"]:visible').fill('Web client isolated QA');
     await a.page.getByRole('button', { name: 'Создать сервер', exact: true }).click();
     await a.page.getByTestId('button-invite').click();

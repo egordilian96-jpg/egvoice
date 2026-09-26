@@ -4,7 +4,33 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import { normalizeSettings, DEFAULT_VOICE_SETTINGS as defaults, wantsTransmission, mediaError } from '../client/src/lib/voice-policy';
 import { safeVoiceError } from '../client/src/lib/voice-diagnostics';
-import { routeRtcConfiguration } from '../client/src/lib/rtc-transport';
+import { routeRtcConfiguration, monitorRtcTransport } from '../client/src/lib/rtc-transport';
+
+test('RTC history survives closed peers, contains no candidates/credentials, restores constructor', async () => {
+  class Peer extends EventTarget {
+    connectionState = 'new'; iceConnectionState = 'new'; signalingState = 'stable';
+    setConfiguration() {}
+    async getStats() { return new Map([['candidate', { type: 'local-candidate', address: '192.168.1.55', username: 'secret' }]]); }
+  }
+  const previous = globalThis.window;
+  (globalThis as any).window = { RTCPeerConnection: Peer };
+  try {
+    const monitor = monitorRtcTransport('auto');
+    const peer = new window.RTCPeerConnection() as unknown as Peer;
+    peer.connectionState = 'connecting'; peer.dispatchEvent(new Event('connectionstatechange'));
+    peer.iceConnectionState = 'failed'; peer.dispatchEvent(new Event('iceconnectionstatechange'));
+    peer.connectionState = 'closed'; peer.dispatchEvent(new Event('connectionstatechange'));
+    const result = (await monitor.summary()).join('\n');
+    assert.match(result, /connection=connecting/);
+    assert.match(result, /ice=failed/);
+    assert.ok(!result.includes('192.168') && !result.includes('secret'));
+    monitor.stop();
+    assert.equal(window.RTCPeerConnection, Peer);
+  } finally {
+    if (previous) (globalThis as any).window = previous;
+    else delete (globalThis as any).window;
+  }
+});
 
 test('TCP-only routing retains advertised credentials, rejects UDP and does not invent servers', () => {
   const result = routeRtcConfiguration({ iceServers: [{ urls: ['stun:example.test', 'turn:example.test?transport=udp', 'turn:example.test?transport=tcp', 'turns:example.test:443', 'turns:example.test?transport=udp'], username: 'user', credential: 'test-only' }] }, 'relay-tcp');

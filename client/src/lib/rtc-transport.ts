@@ -24,12 +24,23 @@ export function routeRtcConfiguration(config: RTCConfiguration = {}, mode: Netwo
 export function monitorRtcTransport(mode: NetworkMode) {
   const Original = window.RTCPeerConnection;
   const peers: RTCPeerConnection[] = [];
+  const history: string[] = [];
+  const started = performance.now();
+  let stopped = false;
   if (!Original) return { stop() {}, summary: async () => ['rtc=unavailable'] };
   class RoutedConnection extends Original {
     constructor(config?: RTCConfiguration) {
       super(routeRtcConfiguration(config, mode));
       peers.push(this);
       if (peers.length > 8) peers.shift();
+      const id = peers.length - 1;
+      const record = () => {
+        if (stopped) return;
+        history.push(`${Math.round(performance.now() - started)}ms pc${id}: connection=${this.connectionState} ice=${this.iceConnectionState} signaling=${this.signalingState}`);
+        if (history.length > 24) history.shift();
+      };
+      record();
+      for (const event of ['connectionstatechange', 'iceconnectionstatechange', 'signalingstatechange']) this.addEventListener(event, record);
     }
     setConfiguration(config: RTCConfiguration) {
       super.setConfiguration(routeRtcConfiguration(config, mode));
@@ -38,10 +49,11 @@ export function monitorRtcTransport(mode: NetworkMode) {
   window.RTCPeerConnection = RoutedConnection;
   return {
     stop() {
+      stopped = true;
       if (window.RTCPeerConnection === RoutedConnection) window.RTCPeerConnection = Original;
     },
     async summary(): Promise<string[]> {
-      return Promise.all(peers.map(async (pc, i) => {
+      const current = await Promise.all(peers.map(async (pc, i) => {
         const parts = [`pc${i}: connection=${pc.connectionState} ice=${pc.iceConnectionState} signaling=${pc.signalingState}`];
         try {
           const stats = await pc.getStats();
@@ -58,6 +70,7 @@ export function monitorRtcTransport(mode: NetworkMode) {
         } catch { parts.push('stats=unavailable'); }
         return parts.join(' ');
       }));
+      return [...history, ...current];
     },
   };
 }

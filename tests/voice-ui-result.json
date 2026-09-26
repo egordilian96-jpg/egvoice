@@ -1,5 +1,5 @@
 {
-  "passed": 21,
+  "passed": 23,
   "checks": [
     "join: real browser capture + real AudioWorklet + mocked RTC publication",
     "friends navigation keeps connected room and visible working mute/leave controls",
@@ -12,6 +12,8 @@
     "Shift+Enter retains newline; Enter sends multiline message",
     "incoming realtime messages do not jump while reading; new-message button returns to bottom",
     "reconnect state and recovery",
+    "Design Lab wide participant tile, invitation tile and keyboard-dismissable profile",
+    "reconnect deadline ends in honest failure, releases microphone and explicit retry rejoins",
     "device loss closes transmission and explicit retry recovers",
     "leave releases capture tracks",
     "permission denial keeps listen-only room; retry publishes without reconnect",
