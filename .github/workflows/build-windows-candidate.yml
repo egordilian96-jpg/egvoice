@@ -82,6 +82,21 @@ jobs:
         shell: pwsh
         run: ./tests/windows-startup.ps1
 
+      - name: Verify native audio publication and TCP-TLS relay
+        shell: pwsh
+        run: |
+          $key = "HKLM:\Software\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments"
+          New-Item -Path $key -Force | Out-Null
+          $flags = "--remote-debugging-port=9222 --use-fake-device-for-media-stream --use-fake-ui-for-media-stream --autoplay-policy=no-user-gesture-required"
+          try {
+            New-ItemProperty -Path $key -Name "eg-voice.exe" -Value $flags -PropertyType String -Force | Out-Null
+            New-ItemProperty -Path $key -Name "ru.egvoice.app" -Value $flags -PropertyType String -Force | Out-Null
+            node tests/windows-voice.cjs
+            if ($LASTEXITCODE -ne 0) { throw "Native voice verification failed" }
+          } finally {
+            Remove-ItemProperty -Path $key -Name "eg-voice.exe","ru.egvoice.app" -ErrorAction SilentlyContinue
+          }
+
       - name: Upload startup diagnostics
         if: always()
         uses: actions/upload-artifact@v4

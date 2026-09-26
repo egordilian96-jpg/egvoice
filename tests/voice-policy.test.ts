@@ -4,6 +4,17 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import { normalizeSettings, DEFAULT_VOICE_SETTINGS as defaults, wantsTransmission, mediaError } from '../client/src/lib/voice-policy';
 import { safeVoiceError } from '../client/src/lib/voice-diagnostics';
+import { routeRtcConfiguration } from '../client/src/lib/rtc-transport';
+
+test('TCP-only routing retains advertised credentials, rejects UDP and does not invent servers', () => {
+  const result = routeRtcConfiguration({ iceServers: [{ urls: ['stun:example.test', 'turn:example.test?transport=udp', 'turn:example.test?transport=tcp', 'turns:example.test:443', 'turns:example.test?transport=udp'], username: 'user', credential: 'test-only' }] }, 'relay-tcp');
+  assert.equal(result.iceTransportPolicy, 'relay');
+  assert.deepEqual(result.iceServers?.[0].urls, ['turn:example.test?transport=tcp', 'turns:example.test:443']);
+  assert.equal(result.iceServers?.[0].credential, 'test-only');
+  assert.throws(() => routeRtcConfiguration({ iceServers: [{ urls: 'turn:example.test?transport=udp' }] }, 'relay-tcp'), /TURN_TCP_UNAVAILABLE/);
+  assert.deepEqual(routeRtcConfiguration({}, 'relay-tcp'), { iceTransportPolicy: 'relay' });
+  assert.equal(normalizeSettings({}).connectionMode, 'compatible');
+});
 
 test('diagnostics remove URLs, tokens and IP addresses', () => {
   const result = safeVoiceError(new Error('Failed wss://example.com/rtc?token=secret 192.168.1.1 eyJabc.def.ghi'));

@@ -1,10 +1,6 @@
 name: EG Voice - native voice diagnostic
 on:
-  push:
-    branches: [computer/windows-0.2.0]
-    paths:
-      - tests/windows-voice.cjs
-      - .github/workflows/windows-voice-diagnostic.yml
+  workflow_dispatch:
 permissions:
   contents: read
   actions: read
@@ -14,6 +10,7 @@ jobs:
     timeout-minutes: 12
     env:
       VITE_API_URL: https://egvoice.pplx.app/port/5000
+      QA_ARTIFACT_VERSION: "0.2.2"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

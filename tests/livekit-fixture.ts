@@ -28,7 +28,7 @@ export class Room {
     },
     unpublishTrack: async () => { this.publication = null; },
   };
-  constructor() { ((window as any).__rooms ||= []).push(this); }
+  constructor(public options?: any) { ((window as any).__rooms ||= []).push(this); }
   on(event: string, fn: Function) { (this.events[event] ||= []).push(fn); return this; }
   emit(event: string, ...args: any[]) { this.events[event]?.forEach(fn => fn(...args)); }
   connectOptions: any;

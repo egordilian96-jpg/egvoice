@@ -66,6 +66,8 @@ export function VoiceNotice() {
           : v.error || 'Микрофон пока не опубликован. Проверь разрешения и устройство.'}
       </p>
       <div className="flex flex-wrap gap-2 mt-3">
+        {v.error && ['publish', 'connect'].includes(v.voiceStep) && (v.settings.networkMode !== 'relay-tcp' || v.settings.connectionMode !== 'compatible') &&
+          <button className={button} disabled={v.connecting || v.deviceBusy} onClick={() => void v.engine.retryCompatibleTcp()}>Совместимое + TCP/TLS</button>}
         {v.publicationFailed && v.settings.networkMode !== 'relay' && <button className={button} disabled={v.connecting || v.deviceBusy} onClick={() => void v.engine.retryWithRelay()}>Переподключиться через TURN</button>}
         {(v.deviceLost || v.listenOnly) && <button className={button} disabled={v.deviceBusy} onClick={() => void v.engine.requestMicrophone()}>Повторить с этим микрофоном</button>}
         {(v.audioBlocked || v.processingPaused) && <button className={button} onClick={() => void v.engine.resumeAudio()}>Включить звук</button>}
@@ -137,12 +139,20 @@ export function LiveAudioSettings() {
     <section className="rounded-xl border border-border p-4 space-y-3">
       <label className="block text-sm font-semibold">Маршрут голосового соединения
         <select aria-label="Маршрут голоса" disabled={!!v.room || v.connecting} value={v.settings.networkMode}
-          onChange={e => v.engine.updateSettings({ networkMode: e.target.value as 'auto' | 'relay' })}
+          onChange={e => v.engine.updateSettings({ networkMode: e.target.value as 'auto' | 'relay' | 'relay-tcp' })}
           className="block mt-2 w-full bg-secondary p-3 rounded-lg text-sm">
           <option value="auto">Автоматически</option><option value="relay">Через TURN (запасной маршрут)</option>
+          <option value="relay-tcp">TURN только TCP/TLS (без UDP)</option>
         </select>
       </label>
       <p className="text-xs text-muted-foreground">Если микрофон работает в проверке, но не отправляется в канал, можно попробовать TURN. Он тоже требует доступного сервера и не гарантирует обход сетевых ограничений. Для ручной смены выйди из голоса.</p>
+      <label className="block text-sm font-semibold">Согласование соединения
+        <select aria-label="Согласование соединения" disabled={!!v.room || v.connecting} value={v.settings.connectionMode}
+          onChange={e => v.engine.updateSettings({ connectionMode: e.target.value as 'compatible' | 'standard' })}
+          className="block mt-2 w-full bg-secondary p-3 rounded-lg text-sm">
+          <option value="compatible">Совместимое (рекомендуется)</option><option value="standard">Стандартное</option>
+        </select>
+      </label>
     </section>
     {v.settings.mode === 'vad' && <label className="block text-sm">Порог активации: {v.settings.threshold} дБFS
       <input aria-label="Порог активации" type="range" min={-80} max={-10} value={v.settings.threshold}

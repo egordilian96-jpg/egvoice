@@ -14,5 +14,5 @@ export function safeVoiceError(error: unknown): string {
   return `${clean(e?.name || 'Error')}${typeof e?.code === 'number' ? ` (${e.code})` : ''}: ${clean(e?.message || 'Unknown error')}`;
 }
 export function publishErrorText(): string {
-  return 'Микрофон открылся, но отправка звука на голосовой сервер не удалась. Это не ошибка выбора микрофона. Можно повторить или проверить запасной маршрут через TURN.';
+  return 'Микрофон открылся, но отправка звука на голосовой сервер не удалась. Попробуй совместимое подключение через TCP/TLS; оно не использует UDP. Доступность сервера всё равно необходима.';
 }

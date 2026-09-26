@@ -11,7 +11,8 @@ const assert = require('node:assert/strict');
   const { SignalRequest, SignalResponse } = await import('@livekit/protocol');
   const out = path.resolve('windows-diagnostics');
   fs.mkdirSync(out, { recursive: true });
-  const report = { version: require('../package.json').version, native: true, syntheticMicrophone: true, attempts: [] };
+  const version = process.env.QA_ARTIFACT_VERSION || require('../package.json').version;
+  const report = { version, native: true, syntheticMicrophone: true, attempts: [] };
   const exe = path.join(process.env.RUNNER_TEMP, 'egvoice-installed', 'eg-voice.exe');
   assert.ok(fs.existsSync(exe), 'installed executable exists');
   const app = spawn(exe, [], {
@@ -42,8 +43,8 @@ const assert = require('node:assert/strict');
     await page.addInitScript(() => {
       window.__qaPeerConnections = [];
       window.RTCPeerConnection = new Proxy(window.RTCPeerConnection, {
-        construct(Target, args) {
-          const pc = new Target(...args); window.__qaPeerConnections.push(pc); return pc;
+        construct(Target, args, newTarget) {
+          const pc = Reflect.construct(Target, args, newTarget); window.__qaPeerConnections.push(pc); return pc;
         },
       });
     });
@@ -65,11 +66,11 @@ const assert = require('node:assert/strict');
       const { channels: list } = await channels.json();
       return { channelId: list.find(c => c.type === 'voice').id };
     }, { api, password, id: randomUUID() });
-    for (const mode of ['auto', 'relay']) {
+    for (const mode of version === '0.2.2' ? ['auto', 'relay'] : ['auto', 'relay', 'relay-tcp']) {
       const attempt = { mode, signals: [], publication: false };
       report.attempts.push(attempt);
       await page.evaluate(mode => {
-        localStorage.setItem('egv.voice.v1', JSON.stringify({ mode: 'open', networkMode: mode, inputId: 'default' }));
+        localStorage.setItem('egv.voice.v1', JSON.stringify({ mode: 'open', networkMode: mode, connectionMode: 'compatible', inputId: 'default' }));
         location.hash = '/';
       }, mode);
       await page.reload();
@@ -116,12 +117,18 @@ const assert = require('node:assert/strict');
             const remote = stats.get(pair?.remoteCandidateId);
             result.localType = local?.candidateType; result.remoteType = remote?.candidateType;
             result.protocol = local?.protocol;
+            result.relayProtocol = local?.relayProtocol;
           }
         }
         return result;
       })));
       await page.getByLabel('Выйти из голоса', { exact: true }).click().catch(() => {});
       await cdp.detach();
+      assert.ok(attempt.peers.some(p => p.outboundAudioPackets > 0), `${mode}: real audio RTP packets sent`);
+      if (mode === 'relay-tcp') {
+        const connected = attempt.peers.filter(p => p.connection === 'connected');
+        assert.ok(connected.length > 0 && connected.every(p => ['tcp', 'tls'].includes(p.relayProtocol)), 'TCP/TLS relay actually selected for every connected peer');
+      }
     }
     assert.ok(report.attempts.every(a => a.publication), 'native audio publication succeeds in auto and relay');
   } catch (error) {

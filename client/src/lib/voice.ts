@@ -5,6 +5,7 @@ import { DEFAULT_VOICE_SETTINGS, normalizeSettings, wantsTransmission, mediaErro
 import workletUrl from './voice-worklet.js?url';
 import { localStore } from './storage';
 import { safeVoiceError, publishErrorText, type VoiceStep } from './voice-diagnostics';
+import { monitorRtcTransport } from './rtc-transport';
 
 export type VoiceParticipant = {
   identity: string; name: string; isLocal: boolean; isSpeaking: boolean; isMicMuted: boolean;
@@ -27,6 +28,7 @@ export class VoiceEngine {
   private audio = new Map<RemoteAudioTrack, HTMLAudioElement>();
   private diagnosticStart = 0;
   private diagnosticEvents: string[] = [];
+  private rtcMonitor: ReturnType<typeof monitorRtcTransport> | null = null;
   state = {
     room: null as Room | null, connectedChannelId: null as string | null, targetChannelId: null as string | null,
     participants: [] as VoiceParticipant[], micMuted: false, outputMuted: false, connecting: false,
@@ -49,11 +51,16 @@ export class VoiceEngine {
     this.diagnosticEvents = this.diagnosticEvents.slice(-12);
     this.emit({ voiceStep: value });
   }
-  private failure(err: unknown) {
+  private async failure(err: unknown) {
+    const epoch = this.epoch, captureEpoch = this.captureEpoch;
+    const trace = [...this.diagnosticEvents, `${Math.round(performance.now() - this.diagnosticStart)}ms failed`];
+    const rtc = await this.rtcMonitor?.summary() ?? [];
+    if (epoch !== this.epoch || captureEpoch !== this.captureEpoch) return;
     this.emit({ diagnostic: [
-      'EG Voice 0.2.2',
+      'EG Voice 0.2.3',
       `route=${this.state.settings.networkMode}`,
-      ...this.diagnosticEvents,
+      `connection=${this.state.settings.connectionMode}`,
+      ...trace, ...rtc,
       safeVoiceError(err),
     ].join('\n') });
   }
@@ -237,7 +244,8 @@ export class VoiceEngine {
       // A failed replacement never silently returns to an unpublished microphone.
       this.closeCapture(this.capture); this.capture = null;
       const publicationFailed = this.state.voiceStep === 'publish';
-      this.failure(err);
+      await this.failure(err);
+      if (epoch !== this.epoch || operation !== this.captureEpoch) return false;
       this.emit({ error: publicationFailed ? publishErrorText() : `${mediaError(err)}${room ? ' Канал открыт в режиме слушателя.' : ''}`, publicationFailed, listenOnly: !!room, transmitting: false });
       return false;
     } finally {
@@ -274,6 +282,13 @@ export class VoiceEngine {
     await this.leave();
     await this.joinChannel(channel);
   };
+  retryCompatibleTcp = async () => {
+    const channel = this.state.connectedChannelId || this.state.targetChannelId;
+    if (!channel || this.state.connecting || this.state.deviceBusy) return;
+    this.updateSettings({ networkMode: 'relay-tcp', connectionMode: 'compatible' });
+    await this.leave();
+    await this.joinChannel(channel);
+  };
   joinChannel = async (channelId: string) => {
     if (this.state.connecting || this.state.connectedChannelId === channelId) return;
     await this.leave();
@@ -285,13 +300,14 @@ export class VoiceEngine {
     try {
       const { token, url } = await api.post<{ token: string; url: string }>('/api/livekit/token', { channelId });
       if (epoch !== this.epoch || this.disposed) return;
-      r = new Room({ adaptiveStream: true, dynacast: true });
+      this.rtcMonitor = monitorRtcTransport(this.state.settings.networkMode);
+      r = new Room({ adaptiveStream: true, dynacast: true, singlePeerConnection: this.state.settings.connectionMode === 'standard' });
       this.emit({ room: r, phase: 'connecting' });
       this.wire(r, epoch);
       this.step('connect');
       await r.connect(url, token, {
-        peerConnectionTimeout: 12000, websocketTimeout: 10000,
-        rtcConfig: this.state.settings.networkMode === 'relay' ? { iceTransportPolicy: 'relay' } : undefined,
+        peerConnectionTimeout: 20000, websocketTimeout: 15000,
+        rtcConfig: this.state.settings.networkMode !== 'auto' ? { iceTransportPolicy: 'relay' } : undefined,
       });
       if (epoch !== this.epoch || this.disposed) { await r.disconnect(); return; }
       this.emit({ phase: 'connected', connectedChannelId: channelId });
@@ -299,16 +315,19 @@ export class VoiceEngine {
       this.rebuild();
     } catch (err) {
       if (epoch === this.epoch) {
-        this.failure(err);
+        await this.failure(err);
+        if (epoch !== this.epoch) return;
         this.emit({ phase: 'failed', error: err instanceof ApiError ? err.message : 'Не удалось подключить голос. Проверь интернет и повтори. Если чат работает, проблема может быть в голосовом сервере или передаче медиа; точная причина пока неизвестна.', room: null, connectedChannelId: null });
         this.clearAudio(); this.closeCapture(this.capture); this.capture = null;
       }
       await r?.disconnect().catch(() => {});
+      if (epoch === this.epoch) { this.rtcMonitor?.stop(); this.rtcMonitor = null; }
     } finally { if (epoch === this.epoch) this.emit({ connecting: false }); }
   };
   leave = async () => {
     ++this.epoch; ++this.captureEpoch;
     const r = this.state.room;
+    const monitor = this.rtcMonitor; this.rtcMonitor = null; monitor?.stop();
     this.ptt = false; this.testing = false; this.silenceSince = 0;
     this.closeCapture(this.capture); this.capture = null; this.clearAudio();
     this.emit({ room: null, connectedChannelId: null, targetChannelId: null, participants: [], connecting: false,
