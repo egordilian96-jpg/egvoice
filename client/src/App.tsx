@@ -15,6 +15,7 @@ import Invite from '@/pages/Invite';
 import Join from '@/pages/Join';
 import Friends from '@/pages/Friends';
 import { VoiceProvider } from '@/lib/voice';
+import { VoiceToolbar } from '@/components/VoiceControls';
 
 function LoadingScreen() {
   return (
@@ -74,7 +75,15 @@ function AppRouter() {
 
 function VoiceSession() {
   const { user } = useAuth();
-  return <VoiceProvider key={user?.id ?? 'guest'}><AppRouter /></VoiceProvider>;
+  return <VoiceProvider key={user?.id ?? 'guest'}><AppRouter /><SecondaryRouteVoiceToolbar /></VoiceProvider>;
+}
+
+function SecondaryRouteVoiceToolbar() {
+  const [route] = useLocation();
+  // Home/settings own their voice controls. Never leave an active microphone
+  // without a visible mute/leave control on invitations, friends or unknown URLs.
+  if (route === '/' || route === '/settings') return null;
+  return <div className="fixed bottom-0 inset-x-0 z-50 bg-background border-t border-border"><VoiceToolbar /></div>;
 }
 
 function App() {

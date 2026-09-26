@@ -46,7 +46,7 @@ export default function Friends() {
       {relationship === 'friend' && <span className="text-sm text-primary">В друзьях</span>}
     </li>;
   }
-  return <main className="min-h-screen bg-background p-4 sm:p-8">
+  return <main className="min-h-screen bg-background p-4 sm:p-8 !pb-32">
     <div className="max-w-3xl mx-auto space-y-6">
       <Link href="/" className="text-sm text-primary">← К каналам</Link>
       <header><h1 className="font-display text-2xl font-semibold">Друзья</h1><p className="text-sm text-muted-foreground mt-2">Найди друга по нику или точному ID и отправь заявку. Он должен её принять.</p>

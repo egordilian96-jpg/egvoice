@@ -1,7 +1,8 @@
 {
-  "passed": 20,
+  "passed": 21,
   "checks": [
     "join: real browser capture + real AudioWorklet + mocked RTC publication",
+    "friends navigation keeps connected room and visible working mute/leave controls",
     "settings route preserves room and mode",
     "PTT hold keydown/up",
     "PTT toggle is fail-closed on focus loss",
