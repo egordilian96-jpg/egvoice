@@ -1,5 +1,5 @@
 const CODE = /^[A-Za-z0-9_-]{8}$/;
-const PUBLIC_HOSTS = new Set(['egvoice.ru', 'www.egvoice.ru', 'egvoice.pplx.app']);
+const PUBLIC_HOSTS = new Set(['egvoice.ru', 'www.egvoice.ru', 'egvoice.pplx.app', 'egvoice-web.pplx.app']);
 
 /** Parse only a code or an EG Voice invite. Never navigate/fetch an input URL. */
 export function parseInvite(input: string): string | null {

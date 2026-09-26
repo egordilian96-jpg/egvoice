@@ -31,7 +31,8 @@ export default function Login() {
           <Logo />
         </div>
         <h1 className="font-display text-[26px] font-semibold tracking-tight">С возвращением</h1>
-        <p className="text-sm text-muted-foreground">Войди, чтобы созваниваться с друзьями</p>
+        <p className="text-sm text-muted-foreground">{import.meta.env.VITE_BROWSER_CLIENT === 'true' ? 'Браузерная версия · установка не нужна' : 'Войди, чтобы созваниваться с друзьями'}</p>
+        {import.meta.env.VITE_BROWSER_CLIENT === 'true' && <p className="text-xs text-muted-foreground pt-2">Твой обычный аккаунт EG Voice. После обновления вкладки потребуется войти снова.</p>}
       </div>
 
       <form onSubmit={submit} className="space-y-3">
