@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import { normalizeSettings, DEFAULT_VOICE_SETTINGS as defaults, wantsTransmission, mediaError } from '../client/src/lib/voice-policy';
-import { safeVoiceError } from '../client/src/lib/voice-diagnostics';
+import { safeVoiceError, isServerAuthError } from '../client/src/lib/voice-diagnostics';
 import { routeRtcConfiguration, monitorRtcTransport } from '../client/src/lib/rtc-transport';
 
 test('RTC history survives closed peers, contains no candidates/credentials, restores constructor', async () => {
@@ -45,6 +45,10 @@ test('TCP-only routing retains advertised credentials, rejects UDP and does not 
 test('diagnostics remove URLs, tokens and IP addresses', () => {
   const result = safeVoiceError(new Error('Failed wss://example.com/rtc?token=secret 192.168.1.1 eyJabc.def.ghi'));
   assert.ok(!result.includes('secret') && !result.includes('192.168') && !result.includes('eyJabc'));
+});
+test('server authentication failure is distinct from publication/network failure', () => {
+  assert.equal(isServerAuthError(new Error('could not establish signal connection: invalid API key')), true);
+  assert.equal(isServerAuthError(new Error('publication of local track timed out')), false);
 });
 test('network mode accepts relay only explicitly', () => {
   assert.equal(normalizeSettings({}).networkMode, 'auto');

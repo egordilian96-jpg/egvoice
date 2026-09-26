@@ -4,7 +4,7 @@ import { api, ApiError } from './api';
 import { DEFAULT_VOICE_SETTINGS, normalizeSettings, wantsTransmission, mediaError, type VoiceSettings } from './voice-policy';
 import workletUrl from './voice-worklet.js?url';
 import { localStore } from './storage';
-import { safeVoiceError, publishErrorText, type VoiceStep } from './voice-diagnostics';
+import { safeVoiceError, publishErrorText, isServerAuthError, type VoiceStep } from './voice-diagnostics';
 import { monitorRtcTransport } from './rtc-transport';
 
 export type VoiceParticipant = {
@@ -41,6 +41,7 @@ export class VoiceEngine {
     storageWarning: false, testing: false,
     voiceStep: 'idle' as VoiceStep, diagnostic: '', publicationFailed: false,
     participantVolumes: {} as Record<string, number>,
+    serverAuthFailed: false,
   };
   subscribe = (fn: () => void) => { this.listeners.add(fn); return () => { this.listeners.delete(fn); }; };
   snapshot = () => this.state;
@@ -320,7 +321,7 @@ export class VoiceEngine {
     const epoch = ++this.epoch;
     this.diagnosticStart = performance.now(); this.diagnosticEvents = [];
     this.step('token');
-    this.emit({ phase: 'token', connecting: true, targetChannelId: channelId, error: null });
+    this.emit({ phase: 'token', connecting: true, targetChannelId: channelId, error: null, serverAuthFailed: false });
     let r: Room | null = null;
     try {
       const { token, url } = await api.post<{ token: string; url: string }>('/api/livekit/token', { channelId });
@@ -342,7 +343,10 @@ export class VoiceEngine {
       if (epoch === this.epoch) {
         await this.failure(err);
         if (epoch !== this.epoch) return;
-        this.emit({ phase: 'failed', error: err instanceof ApiError ? err.message : 'Не удалось подключить голос. Проверь интернет и повтори. Если чат работает, проблема может быть в голосовом сервере или передаче медиа; точная причина пока неизвестна.', room: null, connectedChannelId: null });
+        const serverAuthFailed = isServerAuthError(err);
+        this.emit({ phase: 'failed', serverAuthFailed, error: err instanceof ApiError ? err.message
+          : serverAuthFailed ? 'LiveKit отклонил токен приложения. Нужно исправить ключи голосового сервера. Смена микрофона, VPN или переустановка приложения не исправит эту ошибку.'
+          : 'Не удалось подключить голос. Чат остаётся доступен. Причину соединения нужно проверить по техническим подробностям.', room: null, connectedChannelId: null });
         this.clearAudio(); this.closeCapture(this.capture); this.capture = null;
       }
       await r?.disconnect().catch(() => {});
@@ -360,7 +364,7 @@ export class VoiceEngine {
     this.emit({ room: null, connectedChannelId: null, targetChannelId: null, participants: [], connecting: false,
       phase: 'idle', deviceBusy: false, noSignal: false, deviceLost: false, listenOnly: false, transmitting: false,
       testing: false, processingPaused: false, audioBlocked: false, levelDb: -120, error: null });
-    this.emit({ voiceStep: 'idle', publicationFailed: false });
+    this.emit({ voiceStep: 'idle', publicationFailed: false, serverAuthFailed: false });
     await r?.disconnect().catch(() => {});
   };
   private wire(r: Room, epoch: number) {
@@ -406,6 +410,9 @@ export class VoiceEngine {
     r.on(RoomEvent.Disconnected, () => {
       if (!current()) return;
       event('disconnected');
+      // connect() rejects with the useful authentication/transport error.
+      // Do not invalidate its epoch first and replace it with "disconnected".
+      if (this.state.phase === 'connecting') return;
       void this.endFailed(new Error('Voice room disconnected'), 'Голосовое соединение завершено. Микрофон закрыт. Нажми «Повторить подключение», чтобы вернуться.');
     });
   }
@@ -469,7 +476,7 @@ export class VoiceEngine {
     } catch { this.emit({ error: 'Звук всё ещё заблокирован. Проверь разрешения браузера и нажми ещё раз.' }); }
   };
   dismissNoSignal = () => { this.suppressUntil = performance.now() + 300_000; this.silenceSince = 0; this.emit({ noSignal: false }); };
-  clearError = () => this.emit({ error: null });
+  clearError = () => this.emit({ error: null, serverAuthFailed: false, phase: this.state.phase === 'failed' ? 'idle' : this.state.phase });
 }
 const VoiceContext = createContext<VoiceEngine | null>(null);
 export function VoiceProvider({ children }: { children: ReactNode }) {

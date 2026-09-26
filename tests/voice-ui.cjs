@@ -237,6 +237,16 @@ const errors = [];
     assert.equal(await page.getByTestId('voice-toolbar').count(), 0);
     tokenDelay = 0;
     record('cancel token request never resurrects room');
+    await page.evaluate(() => { window.__failConnectAuth = true; });
+    await page.getByTestId('button-voice-v').click();
+    await page.getByText('Ошибка настройки голосового сервера', { exact: true }).waitFor();
+    assert.match(await page.getByTestId('voice-diagnostic').textContent(), /invalid API key/);
+    assert.equal(await page.getByText('Совместимое + TCP/TLS', { exact: true }).count(), 0);
+    assert.equal(await page.getByText('Проверить устройства', { exact: true }).count(), 0);
+    await page.getByText('Скрыть', { exact: true }).click();
+    await page.getByTestId('voice-notice').waitFor({ state: 'hidden' });
+    await page.evaluate(() => { window.__failConnectAuth = false; });
+    record('Disconnected before connect rejection preserves invalid API key and does not blame microphone');
     await page.evaluate(() => { window.__silence = true; });
     await page.evaluate(async () => {
       const { VoiceEngine } = await import('/src/lib/voice.ts');

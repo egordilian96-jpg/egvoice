@@ -16,3 +16,6 @@ export function safeVoiceError(error: unknown): string {
 export function publishErrorText(): string {
   return 'Микрофон открылся, но сервер не подтвердил отправку звука. Это не ошибка выбора микрофона. Передача закрыта; точную причину нужно проверить по диагностике соединения.';
 }
+export function isServerAuthError(error: unknown): boolean {
+  return /invalid api key|invalid token|unauthorized|token.*expired/i.test(String((error as Error)?.message || ''));
+}

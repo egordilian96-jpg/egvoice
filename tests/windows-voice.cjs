@@ -104,7 +104,7 @@ const assert = require('node:assert/strict');
         const text = document.querySelector('[data-testid="voice-toolbar"]')?.textContent || '';
         return text.includes('Передача открыта') || !!document.querySelector('[data-testid="voice-diagnostic"]');
       }, null, { timeout: 60000 });
-      attempt.publication = await page.getByTestId('voice-toolbar').textContent().then(t => t.includes('Передача открыта'));
+      attempt.publication = await page.getByTestId('voice-toolbar').textContent({ timeout: 500 }).then(t => t.includes('Передача открыта')).catch(() => false);
       attempt.diagnostic = redact(await page.getByTestId('voice-diagnostic').textContent({ timeout: 500 }).catch(() => ''));
       attempt.peers = await page.evaluate(async () => Promise.all(window.__qaPeerConnections.map(async pc => {
         const result = { connection: pc.connectionState, ice: pc.iceConnectionState, signaling: pc.signalingState, outboundAudioPackets: 0 };

@@ -34,6 +34,10 @@ export class Room {
   connectOptions: any;
   async connect(_url?: string, _token?: string, options?: any) {
     this.connectOptions = options;
+    if ((window as any).__failConnectAuth) {
+      this.emit('Disconnected');
+      throw new Error('could not establish signal connection: invalid API key');
+    }
     const delay = (window as any).__connectDelay || 0;
     if (delay) await new Promise(resolve => setTimeout(resolve, delay));
   }

@@ -1,5 +1,5 @@
 {
-  "passed": 23,
+  "passed": 24,
   "checks": [
     "join: real browser capture + real AudioWorklet + mocked RTC publication",
     "friends navigation keeps connected room and visible working mute/leave controls",
@@ -20,6 +20,7 @@
     "publication diagnostics identify publish stage and explicit TURN reconnect uses relay policy",
     "cancel while permission pending stops late-arriving capture",
     "cancel token request never resurrects room",
+    "Disconnected before connect rejection preserves invalid API key and does not blame microphone",
     "30-second real silent capture produces cautious diagnosis, dismiss works",
     "settings mobile viewport fit",
     "reload retains mode but does not reconnect/unmute automatically",

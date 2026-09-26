@@ -72,7 +72,16 @@ const api = 'https://egvoice.pplx.app/port/5000';
       await u.page.getByTestId('mode-open').click();
       await u.page.getByTestId('button-back').click();
       await u.page.getByTestId(`button-voice-${voice.id}`).click();
-      await u.page.waitForFunction(() => document.querySelector('[data-testid="voice-toolbar"]')?.textContent.includes('Передача открыта'), null, { timeout: 60000 });
+      try {
+        await u.page.waitForFunction(() => document.querySelector('[data-testid="voice-toolbar"]')?.textContent.includes('Передача открыта')
+          || !!document.querySelector('[data-testid="voice-diagnostic"]'), null, { timeout: 60000 });
+        if (!(await u.page.getByTestId('voice-toolbar').textContent().catch(() => '')).includes('Передача открыта')) throw new Error('Not published');
+      } catch {
+        const notice = await u.page.getByTestId('voice-notice').textContent().catch(() => 'No notice');
+        const toolbar = await u.page.getByTestId('voice-toolbar').textContent().catch(() => 'No toolbar');
+        await u.page.screenshot({ path: path.join(__dirname, 'screenshots/browser-voice-failure.png') });
+        throw new Error(`Voice connection failed: ${notice}; ${toolbar}`);
+      }
     }
     async function level(page) {
       await page.waitForFunction(() => document.querySelector('audio')?.srcObject != null);

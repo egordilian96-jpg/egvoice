@@ -47,7 +47,8 @@ export function MicModeControl({ compact = false }: { compact?: boolean }) {
 export function VoiceNotice() {
   const v = useVoice();
   const { toast } = useToast();
-  const title = v.phase === 'failed' ? 'Голосовое соединение прервано'
+  const title = v.serverAuthFailed ? 'Ошибка настройки голосового сервера'
+    : v.phase === 'failed' ? 'Голосовое соединение прервано'
     : v.publicationFailed ? 'Не удалось отправить звук'
     : v.deviceLost ? 'Микрофон отключён'
     : v.processingPaused ? 'Обработка звука приостановлена'
@@ -70,14 +71,14 @@ export function VoiceNotice() {
       </p>
       <div className="flex flex-wrap gap-2 mt-3">
         {v.phase === 'failed' && <button className={button} onClick={() => void v.engine.retry()}>Повторить подключение</button>}
-        {v.error && ['publish', 'connect'].includes(v.voiceStep) && (v.settings.networkMode !== 'relay-tcp' || v.settings.connectionMode !== 'compatible') &&
+        {v.error && !v.serverAuthFailed && ['publish', 'connect'].includes(v.voiceStep) && (v.settings.networkMode !== 'relay-tcp' || v.settings.connectionMode !== 'compatible') &&
           <button className={button} disabled={v.connecting || v.deviceBusy} onClick={() => void v.engine.retryCompatibleTcp()}>Совместимое + TCP/TLS</button>}
         {v.publicationFailed && v.settings.networkMode !== 'relay' && <button className={button} disabled={v.connecting || v.deviceBusy} onClick={() => void v.engine.retryWithRelay()}>Переподключиться через TURN</button>}
         {(v.deviceLost || v.listenOnly) && !v.publicationFailed && <button className={button} disabled={v.deviceBusy || v.phase === 'reconnecting'} onClick={() => void v.engine.requestMicrophone()}>Повторить с этим микрофоном</button>}
         {v.publicationFailed && <button className={button} disabled={v.deviceBusy || v.connecting} onClick={() => void v.engine.retry()}>Повторить подключение</button>}
         {(v.audioBlocked || v.processingPaused) && <button className={button} onClick={() => void v.engine.resumeAudio()}>Включить звук</button>}
         {v.noSignal && <button className={button} onClick={v.engine.dismissNoSignal}>Я просто молчу</button>}
-        <Link href="/settings"><button className={button}>Проверить устройства</button></Link>
+        {!v.serverAuthFailed && <Link href="/settings"><button className={button}>Проверить устройства</button></Link>}
         {v.error && !v.listenOnly && !v.deviceLost && <button className={button} onClick={v.clearError}>Скрыть</button>}
       </div>
       {v.diagnostic && <details className="mt-3 text-xs">
