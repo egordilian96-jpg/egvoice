@@ -1,0 +1,44 @@
+name: EG Voice - native voice diagnostic
+on:
+  push:
+    branches: [computer/windows-0.2.0]
+    paths:
+      - tests/windows-voice.cjs
+      - .github/workflows/windows-voice-diagnostic.yml
+permissions:
+  contents: read
+  actions: read
+jobs:
+  native-voice:
+    runs-on: windows-latest
+    timeout-minutes: 12
+    env:
+      VITE_API_URL: https://egvoice.pplx.app/port/5000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: egvoice-windows-4-696c1806a68969fd6b8474701f78950acb1b0adc
+          run-id: 36240567038
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: candidate
+      - name: Install exact 0.2.2 candidate
+        shell: pwsh
+        run: |
+          $exe = Join-Path $PWD "candidate/EG Voice_0.2.2_x64-setup.exe"
+          $target = Join-Path $env:RUNNER_TEMP "egvoice-installed"
+          $setup = Start-Process $exe -ArgumentList @("/S", "/D=$target") -PassThru -Wait
+          if ($setup.ExitCode -ne 0) { throw "Installer exit: $($setup.ExitCode)" }
+      - name: Real native publication via auto and TURN
+        run: node tests/windows-voice.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-voice-diagnostic
+          path: windows-diagnostics/native-voice-result.json
+          retention-days: 7
