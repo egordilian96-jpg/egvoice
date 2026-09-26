@@ -76,6 +76,12 @@ function VoiceSession() {
 function App() {
   useEffect(() => {
     document.documentElement.classList.add('dark');
+    // Reports a mounted React tree to the local startup log; no user data.
+    if ('__TAURI_INTERNALS__' in window) {
+      void import('@tauri-apps/api/core')
+        .then(({ invoke }) => invoke('frontend_ready'))
+        .catch(() => console.warn('Native startup marker unavailable'));
+    }
   }, []);
 
   return (

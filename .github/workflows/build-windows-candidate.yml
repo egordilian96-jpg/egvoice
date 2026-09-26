@@ -75,6 +75,19 @@ jobs:
       - name: Build unsigned installers
         run: npm run tauri:build -- --target x86_64-pc-windows-msvc --bundles nsis,msi
 
+      - name: Install and launch Windows app
+        shell: pwsh
+        run: ./tests/windows-startup.ps1
+
+      - name: Upload startup diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: egvoice-startup-${{ github.run_number }}
+          path: windows-diagnostics/*
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Collect installers and provenance
         shell: pwsh
         run: |
