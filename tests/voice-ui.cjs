@@ -41,6 +41,7 @@ const errors = [];
   await page.routeWebSocket(/\/ws\?/, socket => { chatSocket = socket; });
   page.on('pageerror', e => errors.push(e.message));
   let messageFailure = false, authFailure = false, tokenDelay = 0;
+  const histories = {};
   await page.route('**/api/**', async route => {
     const url = new URL(route.request().url()), endpoint = url.pathname;
     const user = { id: 'qa', nickname: 'Тестировщик', email: 'qa@example.test', avatarColor: '#1FD5F9' };
@@ -59,7 +60,8 @@ const errors = [];
       if (route.request().method() === 'POST') {
         if (messageFailure) return route.fulfill({ status: 500, json: { message: 'Тестовая ошибка доставки' } });
         body = { message: { id: String(Date.now()), channelId: endpoint.split('/')[3], authorId: 'qa', authorNickname: 'Тестировщик', text: route.request().postDataJSON().text, createdAt: new Date().toISOString() } };
-      } else body = { messages: [] };
+        (histories[body.message.channelId] ||= []).push(body.message);
+      } else body = { messages: histories[endpoint.split('/')[3]] || [] };
     } else if (endpoint === '/api/livekit/token') {
       if (tokenDelay) await new Promise(r => setTimeout(r, tokenDelay));
       body = { token: 'fixture-token', url: 'wss://fixture.invalid' };
@@ -146,7 +148,11 @@ const errors = [];
     assert.equal(await page.getByTestId('input-message').inputValue(), '');
     record('Shift+Enter retains newline; Enter sends multiline message');
     assert.ok(chatSocket, 'chat realtime socket connected');
-    const incoming = i => ({ type: 'message', data: { id: `incoming-${i}`, channelId: 't', authorId: 'friend', authorNickname: 'Друг', text: `Сообщение друга ${i}`, createdAt: new Date().toISOString() } });
+    const incoming = i => {
+      const data = { id: `incoming-${i}`, channelId: 't', authorId: 'friend', authorNickname: 'Друг', text: `Сообщение друга ${i}`, createdAt: new Date().toISOString() };
+      (histories.t ||= []).push(data);
+      return { type: 'message', data };
+    };
     for (let i = 0; i < 60; i++) chatSocket.send(JSON.stringify(incoming(i)));
     await page.getByTestId('text-message-incoming-59').waitFor();
     const history = page.getByTestId('message-history');

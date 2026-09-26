@@ -95,6 +95,9 @@ function TextChannel({ channel }: { channel: Channel }) {
 
   const { data, isLoading, isError, refetch } = useQuery<{ messages: Message[] }>({
     queryKey: [`/api/channels/${channel.id}/messages`],
+    // The temporary hosting proxy can reject WebSocket upgrades. Keep the active
+    // text channel live through HTTP too; background tabs do not poll.
+    refetchInterval: 3000,
   });
   const messages = data?.messages ?? [];
   useEffect(() => { if (draft) sessionStore.setItem(draftKey, draft); else sessionStore.removeItem(draftKey); }, [draft, draftKey]);
@@ -103,7 +106,8 @@ function TextChannel({ channel }: { channel: Channel }) {
     mutationFn: async (text: string) => api.post<{ message: Message }>(`/api/channels/${channel.id}/messages`, { text }),
     // Оптимистично: сервер сам разошлёт через WS, но добавим локально сразу,
     // чтобы не ждать. Дедуп сделает WS-обработчик (по id).
-    onSuccess: (r) => {
+    onSuccess: async (r) => {
+      await qc.cancelQueries({ queryKey: [`/api/channels/${channel.id}/messages`] });
       qc.setQueryData<{ messages: Message[] }>([`/api/channels/${channel.id}/messages`], (prev) => {
         const list = prev?.messages ?? [];
         if (list.some((m) => m.id === r.message.id)) return prev!;
