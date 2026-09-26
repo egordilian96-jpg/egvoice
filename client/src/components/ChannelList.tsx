@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { api, ApiError, type Channel, type Server } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import type { VoiceParticipant } from '@/lib/voice';
+import { useVoice } from '@/lib/voice';
 
 type Props = {
   server: Server | null;
@@ -30,10 +31,12 @@ export function ChannelList({
   micMuted, outputMuted, onToggleMic, onToggleOutput,
 }: Props) {
   const { user, logout } = useAuth();
+  const voice = useVoice();
   const [, setLocation] = useLocation();
   const [createOpen, setCreateOpen] = useState(false);
 
   const handleLogout = () => {
+    if (voice.room && !window.confirm('Выйти из аккаунта? Голосовой звонок завершится.')) return;
     logout();
     setLocation('/login');
   };
@@ -45,14 +48,14 @@ export function ChannelList({
       <aside className="w-60 shrink-0 bg-sidebar border-r border-sidebar-border flex flex-col">
         <div className="h-12 px-4 flex items-center justify-between border-b border-sidebar-border/60">
           <div className="font-display font-semibold text-sm truncate tracking-tight">{server?.name ?? 'Сервер'}</div>
-          <button
+          {server?.ownerId === user?.id && <button
             onClick={() => server && setCreateOpen(true)}
             className="hover-elevate rounded p-1"
             data-testid="button-server-settings"
             title="Добавить канал"
           >
             <Plus className="w-4 h-4 text-muted-foreground" />
-          </button>
+          </button>}
         </div>
 
         <div className="flex-1 overflow-y-auto py-3 px-2 space-y-4">

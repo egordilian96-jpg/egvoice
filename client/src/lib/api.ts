@@ -1,14 +1,27 @@
-// Простой fetch-обёрточный клиент. Токен читаем/пишем в localStorage.
+import { localStore } from './storage';
 
 // Куда стучаться:
 // - в Tauri-сборке стоит VITE_API_URL на прод-URL (берётся из .env.production)
 // - в превью-сборке (deploy_website) плейсхолдер __PORT_5000__ заменяется на прокси
+// - в опубликованном (publish_website на *.pplx.app) — прокси на /port/5000
 // - в самохосте (docker) API_BASE = '' и запросы идут на тот же origin
 const API_PLACEHOLDER = '__PORT_5000__';
 const FROM_ENV = (import.meta.env.VITE_API_URL as string | undefined) ?? '';
-export const API_BASE = FROM_ENV
-  ? FROM_ENV.replace(/\/$/, '')
-  : (API_PLACEHOLDER.startsWith('__') ? '' : API_PLACEHOLDER);
+
+function computeApiBase(): string {
+  // 1. Явный VITE_API_URL (Tauri, самохост с внешним backend)
+  if (FROM_ENV) return FROM_ENV.replace(/\/$/, '');
+  // 2. Placeholder заменён при deploy_website на реальный proxy URL
+  if (!API_PLACEHOLDER.startsWith('__')) return API_PLACEHOLDER;
+  // 3. Опубликованный сайт на *.pplx.app — backend через /port/5000
+  if (typeof window !== 'undefined' && window.location.host.endsWith('.pplx.app')) {
+    return window.location.origin + '/port/5000';
+  }
+  // 4. Fallback: тот же origin (dev-режим, docker с общим портом)
+  return '';
+}
+
+export const API_BASE = computeApiBase();
 
 // WS URL — от того же API_BASE, только схема http(s) -> ws(s)
 export function getWsUrl(path: string): string {
@@ -23,12 +36,12 @@ export function getWsUrl(path: string): string {
 const TOKEN_KEY = 'egv.token';
 
 export function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY);
+  return localStore.getItem(TOKEN_KEY);
 }
 
 export function setToken(token: string | null) {
-  if (token) localStorage.setItem(TOKEN_KEY, token);
-  else localStorage.removeItem(TOKEN_KEY);
+  if (token) localStore.setItem(TOKEN_KEY, token);
+  else localStore.removeItem(TOKEN_KEY);
 }
 
 export class ApiError extends Error {
@@ -44,10 +57,11 @@ async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
   headers.set('Content-Type', 'application/json');
   const token = getToken();
   if (token) headers.set('Authorization', `Bearer ${token}`);
-  const res = await fetch(`${API_BASE}${path}`, { ...opts, headers });
+  const res = await fetch(`${API_BASE}${path}`, { ...opts, headers, signal: opts.signal ?? AbortSignal.timeout(20_000) });
   const contentType = res.headers.get('content-type') ?? '';
   const body = contentType.includes('application/json') ? await res.json() : await res.text();
   if (!res.ok) {
+    if (res.status === 401 && !path.startsWith('/api/auth/')) window.dispatchEvent(new Event('egv:session-expired'));
     const msg = typeof body === 'object' && body?.message ? body.message : res.statusText;
     throw new ApiError(msg, res.status);
   }

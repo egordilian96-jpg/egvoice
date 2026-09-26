@@ -1,6 +1,6 @@
 [package]
 name = "eg-voice"
-version = "0.1.0"
+version = "0.2.0"
 description = "EG Voice — голосовой мессенджер для геймеров"
 authors = ["Egor Dilian <egordilian96@gmail.com>"]
 edition = "2021"

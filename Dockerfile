@@ -1,5 +1,5 @@
 # --- build stage ---
-FROM node:20-bookworm AS build
+FROM node:22-bookworm AS build
 WORKDIR /app
 
 # Системные зависимости для better-sqlite3 (сборка native)
@@ -14,7 +14,7 @@ COPY . .
 RUN npm run build
 
 # --- runtime stage ---
-FROM node:20-bookworm-slim AS runtime
+FROM node:22-bookworm-slim AS runtime
 WORKDIR /app
 
 ENV NODE_ENV=production

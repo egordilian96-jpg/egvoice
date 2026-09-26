@@ -1,0 +1,110 @@
+name: EG Voice - Windows candidate
+
+on:
+  push:
+    branches:
+      - computer/windows-0.2.0
+  workflow_dispatch:
+    inputs:
+      api_url:
+        description: "Working HTTPS backend origin (without /api), e.g. https://egvoice.ru"
+        required: true
+        type: string
+
+# Build artifacts only. No release, tag, repository write or deployment.
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-candidate-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      VITE_API_URL: ${{ inputs.api_url || 'https://egvoice.pplx.app/port/5000' }}
+      CARGO_INCREMENTAL: "0"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate backend and version
+        shell: pwsh
+        run: |
+          $api = [Uri]$env:VITE_API_URL
+          if (-not $api.IsAbsoluteUri -or $api.Scheme -ne "https" -or $api.IsLoopback -or
+              $api.Host.EndsWith(".demo") -or $api.Host.EndsWith(".invalid") -or
+              $api.UserInfo -or $api.Query -or $api.Fragment -or $api.AbsolutePath.TrimEnd("/") -match "/api$") {
+            throw "Set a working HTTPS backend base URL, not a local/demo URL or /api endpoint."
+          }
+          $pkg = Get-Content package.json | ConvertFrom-Json
+          $tauri = Get-Content src-tauri/tauri.conf.json | ConvertFrom-Json
+          $cargo = (Select-String -Path src-tauri/Cargo.toml -Pattern '^version = "([^"]+)"').Matches.Groups[1].Value
+          if ($pkg.version -ne $tauri.version -or $pkg.version -ne $cargo) {
+            throw "package.json, Cargo.toml and tauri.conf.json versions must match."
+          }
+          # /auth/me must be an API route, not the frontend HTML fallback.
+          $probe = Invoke-WebRequest -Uri "$($env:VITE_API_URL.TrimEnd('/'))/api/auth/me" -SkipHttpErrorCheck -TimeoutSec 20
+          if ($probe.StatusCode -ne 401 -or $probe.Headers["Content-Type"] -notmatch "application/json") {
+            throw "Backend probe failed: expected JSON HTTP 401 from /api/auth/me."
+          }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri -> target
+
+      - run: npm ci
+
+      - name: Typecheck and voice tests
+        run: |
+          npm run check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run test:voice
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build unsigned installers
+        run: npm run tauri:build -- --target x86_64-pc-windows-msvc --bundles nsis,msi
+
+      - name: Collect installers and provenance
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path windows-candidate -Force | Out-Null
+          $bundle = "src-tauri/target/x86_64-pc-windows-msvc/release/bundle"
+          $files = Get-ChildItem $bundle -Recurse -File | Where-Object {
+            $_.Extension -in ".exe", ".msi"
+          }
+          if (-not ($files | Where-Object Extension -eq ".exe") -or
+              -not ($files | Where-Object Extension -eq ".msi")) {
+            throw "Both NSIS .exe and MSI must exist."
+          }
+          $files | Copy-Item -Destination windows-candidate
+          $checksums = Get-ChildItem windows-candidate -File | Get-FileHash -Algorithm SHA256 |
+            ForEach-Object { "$($_.Hash.ToLower())  $(Split-Path $_.Path -Leaf)" }
+          $checksums | Set-Content windows-candidate/SHA256SUMS.txt
+          @{
+            commit = "${{ github.sha }}"
+            version = (Get-Content package.json | ConvertFrom-Json).version
+            api_url = $env:VITE_API_URL
+            runner = "${{ runner.os }}"
+            target = "x86_64-pc-windows-msvc"
+            signed = $false
+            run = "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          } | ConvertTo-Json | Set-Content windows-candidate/build-info.json
+
+      - name: Upload Actions build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: egvoice-windows-${{ github.run_number }}-${{ github.sha }}
+          path: windows-candidate/*
+          if-no-files-found: error
+          retention-days: 14

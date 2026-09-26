@@ -1,0 +1,10 @@
+{
+  "passed": 5,
+  "checks": [
+    "atomic last-slot invite acceptance never exceeds 10 members",
+    "repeat invite acceptance is idempotent even when server is full",
+    "server owner authorization and case-normalized duplicate channel rejection",
+    "numeric invite limits reject fractional values on backend",
+    "blank and oversized messages rejected by backend"
+  ]
+}

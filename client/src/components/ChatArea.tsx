@@ -7,6 +7,8 @@ import { api, ApiError, type Channel, type Message } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import type { VoiceParticipant } from '@/lib/voice';
 import { formatTime } from '@/lib/format';
+import { VoiceNotice, VoiceToolbar } from './VoiceControls';
+import { sessionStore } from '@/lib/storage';
 
 type Props = {
   channel: Channel | null;
@@ -57,15 +59,16 @@ export function ChatArea({
         </div>
       </div>
 
+      <VoiceNotice />
       {channel.type === 'text'
-        ? <TextChannel channel={channel} />
+        ? <TextChannel key={channel.id} channel={channel} />
         : (
           <VoiceRoom
             channel={channel}
             isConnectedHere={connectedChannelId === channel.id}
             connecting={connecting && connectedChannelId !== channel.id}
             participants={connectedChannelId === channel.id ? voiceParticipants : []}
-            voiceError={voiceError}
+            voiceError={null}
             onDismissVoiceError={onDismissVoiceError}
             onJoin={() => onJoinVoice(channel.id)}
             onLeave={onLeaveVoice}
@@ -75,14 +78,7 @@ export function ChatArea({
         )
       }
 
-      {connectedChannelId && (
-        <VoiceStatusBar
-          channelId={connectedChannelId}
-          micMuted={micMuted}
-          onToggleMic={onToggleMic}
-          onLeave={onLeaveVoice}
-        />
-      )}
+      <VoiceToolbar />
     </main>
   );
 }
@@ -90,13 +86,15 @@ export function ChatArea({
 function TextChannel({ channel }: { channel: Channel }) {
   const qc = useQueryClient();
   const { user } = useAuth();
-  const [draft, setDraft] = useState('');
+  const draftKey = `egv.draft.${user?.id}.${channel.id}`;
+  const [draft, setDraft] = useState(() => sessionStore.getItem(draftKey) || '');
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const { data, isLoading } = useQuery<{ messages: Message[] }>({
+  const { data, isLoading, isError, refetch } = useQuery<{ messages: Message[] }>({
     queryKey: [`/api/channels/${channel.id}/messages`],
   });
   const messages = data?.messages ?? [];
+  useEffect(() => { if (draft) sessionStore.setItem(draftKey, draft); else sessionStore.removeItem(draftKey); }, [draft, draftKey]);
 
   const send = useMutation({
     mutationFn: async (text: string) => api.post<{ message: Message }>(`/api/channels/${channel.id}/messages`, { text }),
@@ -118,7 +116,7 @@ function TextChannel({ channel }: { channel: Channel }) {
 
   const submit = () => {
     const t = draft.trim();
-    if (!t || send.isPending) return;
+    if (!t || t.length > 2000 || send.isPending) return;
     send.mutate(t);
   };
 
@@ -129,7 +127,7 @@ function TextChannel({ channel }: { channel: Channel }) {
           <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
             <Loader2 className="w-4 h-4 animate-spin mr-2" /> Загружаю…
           </div>
-        ) : messages.length === 0 ? (
+        ) : isError ? <div role="status" className="p-5 text-sm">Не удалось загрузить сообщения. <button className="text-primary" onClick={() => void refetch()}>Повторить</button></div> : messages.length === 0 ? (
           <EmptyChat name={channel.name} />
         ) : (
           messages.map((m, i) => {
@@ -166,9 +164,11 @@ function TextChannel({ channel }: { channel: Channel }) {
         <div className="flex items-center gap-2 bg-secondary rounded-lg px-3 py-2">
           <input
             type="text"
+            maxLength={2000}
+            disabled={send.isPending}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), submit())}
+            onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && (e.preventDefault(), submit())}
             placeholder={`Написать в #${channel.name}`}
             className="flex-1 bg-transparent outline-none text-sm placeholder:text-muted-foreground"
             data-testid="input-message"
@@ -182,6 +182,7 @@ function TextChannel({ channel }: { channel: Channel }) {
             <Send className="w-4 h-4" />
           </button>
         </div>
+        <div className="text-xs text-muted-foreground mt-1 text-right">{draft.length} / 2000 · {send.isPending ? 'Отправляем…' : 'Черновик сохраняется в этой вкладке'}</div>
       </div>
     </>
   );
@@ -296,7 +297,7 @@ function VoiceRoom({
                 key={p.identity}
                 participant={p}
                 seed={idx * 1.7}
-                micMuted={p.isLocal ? micMuted : p.isMicMuted}
+                micMuted={p.isMicMuted}
                 onToggleMic={p.isLocal ? onToggleMic : undefined}
               />
             ))}

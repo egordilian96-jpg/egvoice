@@ -10,7 +10,7 @@ import {
   sendMessageSchema, createInviteSchema, toPublicUser,
 } from '../shared/schema';
 import { hashPassword, verifyPassword, signToken, requireAuth, pickAvatarColor } from './auth';
-import { createLiveKitToken, LIVEKIT_URL } from './livekit';
+import { createLiveKitToken, LIVEKIT_URL, liveKitConfigured } from './livekit';
 import { setupRealtime, broadcastToChannel, broadcastToServer } from './realtime';
 
 // ---------- helpers ----------
@@ -146,16 +146,20 @@ export async function registerRoutes(httpServer: HttpServer, app: Express): Prom
   app.post('/api/servers/:serverId/channels', requireAuth, async (req: Request, res: Response) => {
     try {
       const serverId = param(req, 'serverId');
-      if (!(await isMemberOfServer(req.user!.id, serverId))) {
-        return res.status(403).json({ message: 'Нет доступа к серверу' });
+      const srv = db.select().from(servers).where(eq(servers.id, serverId)).get();
+      if (!srv || srv.ownerId !== req.user!.id) {
+        return res.status(403).json({ message: 'Создавать каналы может только владелец сервера' });
       }
       const data = createChannelSchema.parse(req.body);
       const id = nanoid(12);
-      const existing = await db.select().from(channels).where(eq(channels.serverId, serverId));
-      await db.insert(channels).values({
+      const existing = db.select().from(channels).where(eq(channels.serverId, serverId)).all();
+      if (existing.some(c => c.type === data.type && c.name.toLowerCase() === data.name)) {
+        return res.status(409).json({ message: 'Канал такого типа с таким названием уже существует' });
+      }
+      db.insert(channels).values({
         id, serverId, name: data.name, type: data.type,
         position: existing.length, createdAt: new Date(),
-      });
+      }).run();
       const [ch] = await db.select().from(channels).where(eq(channels.id, id)).limit(1);
       res.json({ channel: ch });
     } catch (err) { handleZodError(err, res); }
@@ -266,30 +270,33 @@ export async function registerRoutes(httpServer: HttpServer, app: Express): Prom
 
   app.post('/api/invites/:code/accept', requireAuth, async (req: Request, res: Response) => {
     const code = param(req, 'code');
-    const [inv] = await db.select().from(invites).where(eq(invites.code, code)).limit(1);
-    if (!inv) return res.status(404).json({ message: 'Инвайт не найден' });
-    if (inv.expiresAt && inv.expiresAt < new Date()) {
-      return res.status(410).json({ message: 'Инвайт просрочен' });
-    }
-    if (inv.maxUses != null && inv.uses >= inv.maxUses) {
-      return res.status(410).json({ message: 'Инвайт исчерпан' });
-    }
-    if (await isMemberOfServer(req.user!.id, inv.serverId)) {
-      return res.json({ serverId: inv.serverId, alreadyMember: true });
-    }
-    db.transaction((tx) => {
+    // Membership, capacity and invite-use checks form one SQLite write transaction.
+    // No awaits between check and insert: concurrent accepts cannot overbook the MVP.
+    const result = db.transaction((tx) => {
+      const inv = tx.select().from(invites).where(eq(invites.code, code)).get();
+      if (!inv) return { status: 404, message: 'Инвайт не найден' };
+      const srv = tx.select().from(servers).where(eq(servers.id, inv.serverId)).get();
+      if (!srv) return { status: 404, message: 'Сервер удалён' };
+      const members = tx.select().from(serverMembers).where(eq(serverMembers.serverId, inv.serverId)).all();
+      if (members.some(m => m.userId === req.user!.id)) return { status: 200, serverId: inv.serverId, alreadyMember: true };
+      if (inv.expiresAt && inv.expiresAt < new Date()) return { status: 410, message: 'Инвайт просрочен' };
+      if (inv.maxUses != null && inv.uses >= inv.maxUses) return { status: 410, message: 'Инвайт исчерпан' };
+      if (members.length >= 10) return { status: 409, message: 'На сервере уже 10 участников. Попроси владельца освободить место.' };
       tx.insert(serverMembers).values({
         id: nanoid(12), serverId: inv.serverId, userId: req.user!.id, joinedAt: new Date(),
       }).run();
       tx.update(invites).set({ uses: inv.uses + 1 }).where(eq(invites.code, code)).run();
-    });
-    broadcastToServer(inv.serverId, { type: 'member-joined', data: { userId: req.user!.id, nickname: req.user!.nickname } });
-    res.json({ serverId: inv.serverId });
+      return { status: 200, serverId: inv.serverId, alreadyMember: false };
+    }, { behavior: 'immediate' });
+    if (result.status !== 200) return res.status(result.status).json({ message: result.message });
+    if (!result.alreadyMember) broadcastToServer(result.serverId!, { type: 'member-joined', data: { userId: req.user!.id, nickname: req.user!.nickname } });
+    res.json({ serverId: result.serverId, alreadyMember: result.alreadyMember });
   });
 
   // ====== LIVEKIT ======
 
   app.post('/api/livekit/token', requireAuth, async (req: Request, res: Response) => {
+    if (!liveKitConfigured()) return res.status(503).json({ message: 'Голосовой сервер пока не настроен. Нужны LIVEKIT_URL, LIVEKIT_API_KEY и LIVEKIT_API_SECRET на сервере.' });
     const schema = z.object({ channelId: z.string() });
     try {
       const { channelId } = schema.parse(req.body);

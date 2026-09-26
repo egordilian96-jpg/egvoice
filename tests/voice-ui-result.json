@@ -1,0 +1,24 @@
+{
+  "passed": 18,
+  "checks": [
+    "join: real browser capture + real AudioWorklet + mocked RTC publication",
+    "settings route preserves room and mode",
+    "PTT hold keydown/up",
+    "PTT toggle is fail-closed on focus loss",
+    "deafen restores manual mute instead of opening microphone",
+    "per-channel drafts and no hotkeys while typing",
+    "send failure retains draft and explicit retry succeeds",
+    "reconnect state and recovery",
+    "device loss closes transmission and explicit retry recovers",
+    "leave releases capture tracks",
+    "permission denial keeps listen-only room; retry publishes without reconnect",
+    "publication failure releases capture and supports in-room recovery",
+    "cancel while permission pending stops late-arriving capture",
+    "cancel token request never resurrects room",
+    "30-second real silent capture produces cautious diagnosis, dismiss works",
+    "settings mobile viewport fit",
+    "reload retains mode but does not reconnect/unmute automatically",
+    "offline auth retains token and retries instead of logging user out"
+  ],
+  "errors": []
+}

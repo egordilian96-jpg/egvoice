@@ -107,8 +107,8 @@ export const messagesRelations = relations(messages, ({ one }) => ({
 // ============================================================================
 export const registerSchema = z.object({
   email: z.string().email('Некорректный email'),
-  password: z.string().min(6, 'Пароль минимум 6 символов').max(72, 'Слишком длинный пароль'),
-  nickname: z.string().min(2, 'Ник минимум 2 символа').max(20, 'Ник максимум 20 символов'),
+  password: z.string().min(8, 'Пароль минимум 8 символов').max(72, 'Слишком длинный пароль'),
+  nickname: z.string().trim().min(2, 'Ник минимум 2 символа').max(20, 'Ник максимум 20 символов'),
 });
 
 export const loginSchema = z.object({
@@ -117,21 +117,21 @@ export const loginSchema = z.object({
 });
 
 export const createServerSchema = z.object({
-  name: z.string().min(2, 'Название минимум 2 символа').max(40),
+  name: z.string().trim().min(2, 'Название минимум 2 символа').max(40),
 });
 
 export const createChannelSchema = z.object({
-  name: z.string().min(1).max(40).regex(/^[a-zа-я0-9-]+$/i, 'Только буквы, цифры и дефис'),
+  name: z.string().trim().toLowerCase().min(1).max(40).regex(/^[a-zа-я0-9-]+$/i, 'Только буквы, цифры и дефис'),
   type: z.enum(['text', 'voice']),
 });
 
 export const sendMessageSchema = z.object({
-  text: z.string().min(1).max(2000),
+  text: z.string().trim().min(1).max(2000),
 });
 
 export const createInviteSchema = z.object({
-  expiresInHours: z.number().min(1).max(24 * 7).optional(),
-  maxUses: z.number().min(1).max(100).optional(),
+  expiresInHours: z.number().int().min(1).max(24 * 7).optional(),
+  maxUses: z.number().int().min(1).max(100).optional(),
 });
 
 // ============================================================================

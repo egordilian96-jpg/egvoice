@@ -9,8 +9,9 @@ import { MembersSidebar } from '@/components/MembersSidebar';
 import { InviteDialog } from '@/components/InviteDialog';
 import { api, type Channel, type Server, type Message } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { useVoice, useRemoteAudioPlayback } from '@/lib/voice';
+import { useVoice } from '@/lib/voice';
 import { useWebSocket } from '@/lib/ws';
+import { sessionStore } from '@/lib/storage';
 
 export default function Home() {
   const qc = useQueryClient();
@@ -33,19 +34,18 @@ export default function Home() {
   };
 
   const voice = useVoice();
-  useRemoteAudioPlayback(voice.room);
 
   // При заходе — если есть pending invite, ведём принимать
   useEffect(() => {
-    const code = sessionStorage.getItem('egv.pendingInvite');
+    const code = sessionStore.getItem('egv.pendingInvite');
     if (code && user) {
-      sessionStorage.removeItem('egv.pendingInvite');
+      sessionStore.removeItem('egv.pendingInvite');
       setLocation(`/invite/${code}`);
     }
   }, [user, setLocation]);
 
   // Серверы
-  const { data: srvData } = useQuery<{ servers: Server[] }>({ queryKey: ['/api/servers'] });
+  const { data: srvData, isLoading: serversLoading, isError: serversError, refetch: retryServers } = useQuery<{ servers: Server[] }>({ queryKey: ['/api/servers'] });
   const servers = srvData?.servers ?? [];
 
   useEffect(() => {
@@ -63,40 +63,19 @@ export default function Home() {
   });
   const channels = chData?.channels ?? [];
 
-  // Первый канал по умолчанию
+  // Первый канал по умолчанию.
+  // Если пользователь сейчас в голосовом канале — приоритетно показываем его,
+  // чтобы после возврата из Settings не выбрасывать в текстовый.
   useEffect(() => {
     if (!activeServerId) return;
     if (!activeChannel || activeChannel.serverId !== activeServerId) {
-      const first = channels.find((c) => c.type === 'text') ?? channels[0];
+      const inVoice = voice.connectedChannelId
+        ? channels.find((c) => c.id === voice.connectedChannelId)
+        : null;
+      const first = inVoice ?? channels.find((c) => c.type === 'text') ?? channels[0];
       setActiveChannel(first ?? null);
     }
-  }, [activeServerId, channels, activeChannel]);
-
-  // Глобальные шорткаты голоса
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      // Не ловим в input/textarea/contenteditable — только глобально
-      const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
-
-      // M — микрофон (только если в канале)
-      if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && (e.key === 'm' || e.key === 'M' || e.key === 'ь' || e.key === 'Ь')) {
-        if (voice.connectedChannelId) {
-          e.preventDefault();
-          voice.toggleMic();
-        }
-      }
-      // Ctrl+Shift+D — отключиться
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'D' || e.key === 'd' || e.key === 'в' || e.key === 'В')) {
-        if (voice.connectedChannelId) {
-          e.preventDefault();
-          voice.leave();
-        }
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [voice.connectedChannelId, voice.toggleMic, voice.leave]);
+  }, [activeServerId, channels, activeChannel, voice.connectedChannelId]);
 
   // WebSocket — обновляем кэш при новых сообщениях
   useWebSocket(!!user, (ev) => {
@@ -117,7 +96,11 @@ export default function Home() {
   });
 
   // Первый заход, серверов нет → предложим создать
-  const noServers = servers.length === 0;
+  const noServers = !serversLoading && !serversError && servers.length === 0;
+  if (serversLoading || serversError) return <main className="h-screen flex flex-col items-center justify-center gap-3 p-6">
+    <p>{serversLoading ? 'Загружаем серверы…' : 'Не удалось загрузить серверы. Твоя тусовка не пропала.'}</p>
+    {serversError && <button className="rounded-lg bg-primary text-primary-foreground p-3" onClick={() => void retryServers()}>Повторить</button>}
+  </main>;
 
   return (
     <div className="h-[100dvh] w-screen flex flex-col md:flex-row overflow-hidden bg-background text-foreground">

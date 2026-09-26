@@ -4,6 +4,8 @@ import { Users } from 'lucide-react';
 import { Logo } from '@/components/Logo';
 import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import { useQueryClient } from '@tanstack/react-query';
+import { sessionStore } from '@/lib/storage';
 
 type InvitePreview = {
   server: { id: string; name: string };
@@ -12,21 +14,26 @@ type InvitePreview = {
 
 export default function Invite({ code }: { code: string }) {
   const [, setLocation] = useLocation();
+  const qc = useQueryClient();
   const { user, loading } = useAuth();
   const [preview, setPreview] = useState<InvitePreview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
+    let active = true;
+    setPreview(null); setError(null);
     api.get<InvitePreview>(`/api/invites/${code}`)
-      .then(setPreview)
-      .catch((err) => setError(err instanceof ApiError ? err.message : 'Не удалось загрузить'));
+      .then(result => { if (active) setPreview(result); })
+      .catch((err) => { if (active) setError(err instanceof ApiError ? err.message : 'Не удалось загрузить'); });
+    return () => { active = false; };
   }, [code]);
 
   const accept = async () => {
+    if (busy) return;
     if (!user) {
       // Сохраняем код в sessionStorage и уходим на логин; после — вернуть сюда.
-      sessionStorage.setItem('egv.pendingInvite', code);
+      sessionStore.setItem('egv.pendingInvite', code);
       setLocation('/login');
       return;
     }
@@ -34,6 +41,7 @@ export default function Invite({ code }: { code: string }) {
     setError(null);
     try {
       await api.post<{ serverId: string }>(`/api/invites/${code}/accept`);
+      await qc.invalidateQueries({ queryKey: ['/api/servers'] });
       setLocation('/');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Не удалось принять');

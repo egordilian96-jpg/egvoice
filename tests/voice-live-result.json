@@ -1,0 +1,11 @@
+{
+  "received": 0.10773857490954888,
+  "muted": 0,
+  "pttClosed": 0,
+  "reopened": 0.1077100756475933,
+  "vadClosed": 0,
+  "vadOpen": 0.10771311332595733,
+  "deafen": 0,
+  "errors": [],
+  "transport": "Real local LiveKit 1.13.7 + two Chromium contexts + WebRTC decoded audio"
+}

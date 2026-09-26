@@ -9,7 +9,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me-in-prod';
 const JWT_EXPIRES = '30d';
 
 if (JWT_SECRET === 'dev-secret-change-me-in-prod' && process.env.NODE_ENV === 'production') {
-  console.warn('[auth] ВНИМАНИЕ: JWT_SECRET не задан в production!');
+  throw new Error('JWT_SECRET must be configured before starting production');
 }
 
 export async function hashPassword(plain: string): Promise<string> {

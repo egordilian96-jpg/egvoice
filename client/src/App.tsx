@@ -12,6 +12,7 @@ import Login from '@/pages/Login';
 import Register from '@/pages/Register';
 import Settings from '@/pages/Settings';
 import Invite from '@/pages/Invite';
+import { VoiceProvider } from '@/lib/voice';
 
 function LoadingScreen() {
   return (
@@ -22,19 +23,28 @@ function LoadingScreen() {
 }
 
 function Protected({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, loading, loadError, retry } = useAuth();
   if (loading) return <LoadingScreen />;
+  if (loadError) return <ConnectionRetry retry={retry} />;
   if (!user) return <Redirect to="/login" />;
   return <>{children}</>;
 }
 
 function AuthOnly({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, loading, loadError, retry } = useAuth();
   if (loading) return <LoadingScreen />;
+  if (loadError) return <ConnectionRetry retry={retry} />;
   if (user) return <Redirect to="/" />;
   return <>{children}</>;
 }
 
+function ConnectionRetry({ retry }: { retry: () => void }) {
+  return <main className="h-screen flex flex-col items-center justify-center gap-4 p-6 text-center">
+    <h1 className="text-xl font-semibold">Не удалось проверить подключение</h1>
+    <p className="text-muted-foreground">Сессия сохранена. Проверь интернет или повтори позже.</p>
+    <button className="bg-primary text-primary-foreground rounded-lg px-4 py-2" onClick={retry}>Повторить</button>
+  </main>;
+}
 function AppRouter() {
   return (
     <Switch>
@@ -58,6 +68,11 @@ function AppRouter() {
   );
 }
 
+function VoiceSession() {
+  const { user } = useAuth();
+  return <VoiceProvider key={user?.id ?? 'guest'}><AppRouter /></VoiceProvider>;
+}
+
 function App() {
   useEffect(() => {
     document.documentElement.classList.add('dark');
@@ -69,7 +84,7 @@ function App() {
         <TooltipProvider>
           <Toaster />
           <Router hook={useHashLocation}>
-            <AppRouter />
+            <VoiceSession />
           </Router>
         </TooltipProvider>
       </AuthProvider>
