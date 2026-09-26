@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Hash, Volume2, Send, Bell, Users, Search, PhoneOff, Mic, MicOff, Signal, Phone, Loader2, Headphones, AlertTriangle, X } from 'lucide-react';
+import { Hash, Volume2, Send, Bell, Users, Search, PhoneOff, Mic, MicOff, Signal, Phone, Loader2, Headphones, AlertTriangle, X, ArrowDown } from 'lucide-react';
 import { UserAvatar } from './Avatar';
 import { Waveform, MiniBars } from './Waveform';
 import { api, ApiError, type Channel, type Message } from '@/lib/api';
@@ -36,7 +36,7 @@ export function ChatArea({
   }
 
   return (
-    <main className="flex-1 flex flex-col min-w-0">
+    <main className="flex-1 flex flex-col min-w-0 min-h-0">
       <div className="h-12 shrink-0 flex items-center px-4 gap-3 border-b border-border/60 bg-background">
         {channel.type === 'voice'
           ? <Volume2 className="w-5 h-5 text-muted-foreground" />
@@ -47,13 +47,13 @@ export function ChatArea({
           {channel.type === 'voice' ? 'голосовой канал' : 'обсуждение'}
         </div>
         <div className="ml-auto flex items-center gap-1">
-          <button className="hover-elevate rounded p-1.5 text-muted-foreground" data-testid="button-notifications" title="Уведомления">
+          <button disabled aria-label="Уведомления пока недоступны" className="rounded p-1.5 text-muted-foreground opacity-40 cursor-not-allowed" data-testid="button-notifications" title="Уведомления пока недоступны">
             <Bell className="w-4 h-4" />
           </button>
-          <button className="hover-elevate rounded p-1.5 text-muted-foreground" data-testid="button-members" title="Участники">
+          <button disabled aria-label="Управление участниками пока недоступно" className="rounded p-1.5 text-muted-foreground opacity-40 cursor-not-allowed" data-testid="button-members" title="Управление участниками пока недоступно">
             <Users className="w-4 h-4" />
           </button>
-          <button className="hover-elevate rounded p-1.5 text-muted-foreground" data-testid="button-search" title="Поиск">
+          <button disabled aria-label="Поиск сообщений пока недоступен" className="rounded p-1.5 text-muted-foreground opacity-40 cursor-not-allowed" data-testid="button-search" title="Поиск сообщений пока недоступен">
             <Search className="w-4 h-4" />
           </button>
         </div>
@@ -89,6 +89,9 @@ function TextChannel({ channel }: { channel: Channel }) {
   const draftKey = `egv.draft.${user?.id}.${channel.id}`;
   const [draft, setDraft] = useState(() => sessionStore.getItem(draftKey) || '');
   const scrollRef = useRef<HTMLDivElement>(null);
+  const nearBottom = useRef(true);
+  const previousCount = useRef(0);
+  const [unseen, setUnseen] = useState(0);
 
   const { data, isLoading, isError, refetch } = useQuery<{ messages: Message[] }>({
     queryKey: [`/api/channels/${channel.id}/messages`],
@@ -111,8 +114,14 @@ function TextChannel({ channel }: { channel: Channel }) {
   });
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
-  }, [messages.length]);
+    const added = Math.max(0, messages.length - previousCount.current);
+    const ownLatest = messages.at(-1)?.authorId === user?.id;
+    if (nearBottom.current || (added > 0 && ownLatest)) {
+      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
+      setUnseen(0);
+    } else if (added) setUnseen(n => n + added);
+    previousCount.current = messages.length;
+  }, [messages, user?.id]);
 
   const submit = () => {
     const t = draft.trim();
@@ -122,7 +131,11 @@ function TextChannel({ channel }: { channel: Channel }) {
 
   return (
     <>
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+      <div ref={scrollRef} data-testid="message-history" onScroll={() => {
+        const el = scrollRef.current!;
+        nearBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+        if (nearBottom.current) setUnseen(0);
+      }} className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-4">
         {isLoading ? (
           <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
             <Loader2 className="w-4 h-4 animate-spin mr-2" /> Загружаю…
@@ -133,11 +146,12 @@ function TextChannel({ channel }: { channel: Channel }) {
           messages.map((m, i) => {
             const prev = messages[i - 1];
             const grouped = prev && prev.authorId === m.authorId
-              && (new Date(m.createdAt).getTime() - new Date(prev.createdAt).getTime() < 5 * 60_000);
+              && (new Date(m.createdAt).getTime() - new Date(prev.createdAt).getTime() < 5 * 60_000)
+              && new Date(prev.createdAt).toDateString() === new Date(m.createdAt).toDateString();
             const author = { id: m.authorId, nickname: m.authorNickname, avatarColor: m.authorColor };
             return grouped ? (
               <div key={m.id} className="pl-12 -mt-3 group hover-elevate rounded py-0.5">
-                <div className="text-[15px] leading-relaxed" data-testid={`text-message-${m.id}`}>{m.text}</div>
+                <div className="text-[14px] leading-relaxed whitespace-pre-wrap break-words [overflow-wrap:anywhere]" data-testid={`text-message-${m.id}`}>{m.text}</div>
               </div>
             ) : (
               <div key={m.id} className="flex gap-3 group hover-elevate rounded py-1">
@@ -147,7 +161,7 @@ function TextChannel({ channel }: { channel: Channel }) {
                     <span className="font-semibold text-sm">{m.authorNickname}{m.authorId === user?.id ? ' (ты)' : ''}</span>
                     <span className="text-[11px] text-muted-foreground">{formatTime(m.createdAt)}</span>
                   </div>
-                  <div className="text-[15px] leading-relaxed" data-testid={`text-message-${m.id}`}>{m.text}</div>
+                  <div className="text-[14px] leading-relaxed whitespace-pre-wrap break-words [overflow-wrap:anywhere]" data-testid={`text-message-${m.id}`}>{m.text}</div>
                 </div>
               </div>
             );
@@ -155,22 +169,27 @@ function TextChannel({ channel }: { channel: Channel }) {
         )}
       </div>
 
+      {unseen > 0 && <button className="mx-4 mt-2 flex items-center justify-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-xs text-primary" data-testid="jump-new-messages" onClick={() => {
+        nearBottom.current = true; setUnseen(0); scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+      }}><ArrowDown size={14} />Новые сообщения · {unseen}</button>}
       <div className="p-4 shrink-0">
         {send.isError && (
-          <div className="mb-2 text-sm text-destructive bg-destructive/10 border border-destructive/30 rounded-lg px-3 py-2">
+          <div role="alert" className="mb-2 text-sm text-destructive bg-destructive/10 border border-destructive/30 rounded-lg px-3 py-2">
             {send.error instanceof ApiError ? send.error.message : 'Не удалось отправить'}
+            <span className="block text-xs mt-1">Текст сохранён в поле. Проверь историю перед повторной отправкой.</span>
           </div>
         )}
         <div className="flex items-center gap-2 bg-secondary rounded-lg px-3 py-2">
-          <input
-            type="text"
+          <textarea
+            rows={2}
+            aria-label={`Сообщение в ${channel.name}`}
             maxLength={2000}
             disabled={send.isPending}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && (e.preventDefault(), submit())}
             placeholder={`Написать в #${channel.name}`}
-            className="flex-1 bg-transparent outline-none text-sm placeholder:text-muted-foreground"
+            className="flex-1 min-w-0 resize-y max-h-36 bg-transparent outline-none text-sm placeholder:text-muted-foreground"
             data-testid="input-message"
           />
           <button
@@ -178,11 +197,12 @@ function TextChannel({ channel }: { channel: Channel }) {
             disabled={!draft.trim() || send.isPending}
             className="text-primary disabled:text-muted-foreground disabled:cursor-not-allowed hover-elevate rounded p-1"
             data-testid="button-send-message"
+            aria-label={send.isPending ? 'Отправляем сообщение' : 'Отправить сообщение'}
           >
-            <Send className="w-4 h-4" />
+            {send.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
           </button>
         </div>
-        <div className="text-xs text-muted-foreground mt-1 text-right">{draft.length} / 2000 · {send.isPending ? 'Отправляем…' : 'Черновик сохраняется в этой вкладке'}</div>
+        <div className="text-xs text-muted-foreground mt-1 text-right">{draft.length} / 2000 · {send.isPending ? 'Отправляем…' : 'Enter: отправить · Shift+Enter: новая строка'}</div>
       </div>
     </>
   );
@@ -250,7 +270,7 @@ function VoiceRoom({
             </h1>
             <div className="mt-2 text-sm text-muted-foreground flex items-center gap-3 tabular-nums">
               <span>
-                {participants.length === 0 ? 'пусто' :
+                {participants.length === 0 ? (isConnectedHere ? 'Обновляем участников…' : 'Подключись, чтобы увидеть участников') :
                   participants.length === 1 ? '1 участник' :
                   `${participants.length} ${pluralize(participants.length, ['участник', 'участника', 'участников'])}`}
               </span>
@@ -291,7 +311,7 @@ function VoiceRoom({
         {participants.length === 0 ? (
           <EmptyVoiceStage isConnectedHere={isConnectedHere} connecting={connecting} onJoin={onJoin} />
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,240px))] justify-center content-center min-h-[340px] gap-3 max-w-5xl mx-auto">
             {participants.map((p, idx) => (
               <ParticipantCard
                 key={p.identity}
@@ -333,13 +353,13 @@ function EmptyVoiceStage({
         <div>
           <div className="font-display text-lg font-semibold">Ты в канале один</div>
           <div className="text-sm text-muted-foreground mt-1 max-w-sm">
-            Микрофон активен. Позови друзей — скопируй инвайт в шапке сервера.
+            Проверь состояние микрофона в панели звонка. Позови друзей через «Пригласить друга».
           </div>
         </div>
         <div className="mt-2 text-[11px] text-muted-foreground/70 flex items-center gap-3">
           <Kbd>M</Kbd> микрофон
           <span className="text-border">·</span>
-          <Kbd>Ctrl+Shift+D</Kbd> отключиться
+          <Kbd>Ctrl+Shift+X</Kbd> отключиться
         </div>
       </div>
     );
@@ -353,9 +373,9 @@ function EmptyVoiceStage({
         </div>
       </div>
       <div>
-        <div className="font-display text-lg font-semibold">Здесь пока тихо</div>
+        <div className="font-display text-lg font-semibold">Зайди в голосовой канал</div>
         <div className="text-sm text-muted-foreground mt-1 max-w-sm">
-          Подключись первым — в канале откроется микрофон, а друзья увидят, что ты тут.
+          Выберите с другом один канал. После подключения увидишь его участников и состояние своего микрофона.
         </div>
       </div>
       <button
@@ -394,12 +414,15 @@ function ParticipantCard({
 
   return (
     <div
-      className={`relative bg-card border rounded-xl p-5 flex flex-col items-center gap-3 transition-all duration-200 ${
-        isSpeaking ? 'voice-card-speaking scale-[1.015]' : 'border-card-border'
+      className={`relative bg-card border rounded-2xl px-5 pt-10 pb-5 min-h-[235px] flex flex-col items-center gap-3 transition-colors duration-150 ${
+        isSpeaking ? 'border-emerald-400/60 bg-emerald-400/5' : 'border-card-border'
       }`}
       data-testid={`voice-card-${participant.identity}`}
       data-speaking={isSpeaking ? 'true' : 'false'}
     >
+      {participant.connectionQuality && participant.connectionQuality !== 'unknown' && <span className={`absolute top-3 left-3 flex items-center gap-1 text-[10px] ${participant.connectionQuality === 'poor' || participant.connectionQuality === 'lost' ? 'text-amber-300' : 'text-muted-foreground'}`}>
+        <Signal size={12} />{({ excellent: 'Связь отличная', good: 'Связь хорошая', poor: 'Связь слабая', lost: 'Связь потеряна' } as Record<string, string>)[participant.connectionQuality] || 'Связь'}
+      </span>}
       {onToggleMic && (
         <button
           onClick={onToggleMic}
@@ -415,14 +438,14 @@ function ParticipantCard({
 
       <UserAvatar
         user={{ id: participant.identity, nickname: participant.name, avatarColor: color }}
-        size={80}
+        size={76}
         speaking={isSpeaking}
         level={participant.audioLevel}
         muted={isMuted}
       />
 
-      <div className="flex items-center gap-2 mt-1">
-        <span className="text-[15px] font-semibold tracking-tight" data-testid={`text-name-${participant.identity}`}>
+      <div className="flex items-center justify-center gap-2 mt-1 w-full min-w-0">
+        <span title={participant.name} className="text-[14px] font-semibold tracking-tight truncate" data-testid={`text-name-${participant.identity}`}>
           {participant.name}
         </span>
         {participant.isLocal && (
@@ -432,17 +455,17 @@ function ParticipantCard({
         )}
       </div>
 
-      <div className="h-[44px] w-full flex items-center justify-center">
+      <div className="h-[30px] w-full flex items-center justify-center">
         <Waveform
           active={isSpeaking}
           seed={seed}
           width={148}
-          height={40}
+          height={26}
           audioTrack={participant.audioTrack}
         />
       </div>
 
-      <StatusPill isSpeaking={isSpeaking} isMuted={isMuted} />
+      {participant.listenOnly ? <span className="text-xs text-amber-300">Только слушает</span> : <StatusPill isSpeaking={isSpeaking} isMuted={isMuted} />}
     </div>
   );
 }

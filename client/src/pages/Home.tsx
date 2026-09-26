@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useLocation } from 'wouter';
+import { Link, useLocation } from 'wouter';
 import { Server as ServerIcon, Hash, Users } from 'lucide-react';
 import { ServerList } from '@/components/ServerList';
 import { ChannelList } from '@/components/ChannelList';
@@ -17,7 +17,8 @@ export default function Home() {
   const qc = useQueryClient();
   const { user } = useAuth();
   const [, setLocation] = useLocation();
-  const [activeServerId, setActiveServerId] = useState<string | null>(null);
+  const [joinedServerId] = useState(() => sessionStore.getItem('egv.openServer'));
+  const [activeServerId, setActiveServerId] = useState<string | null>(() => sessionStore.getItem('egv.openServer'));
   const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
 
@@ -49,10 +50,11 @@ export default function Home() {
   const servers = srvData?.servers ?? [];
 
   useEffect(() => {
+    if (joinedServerId && servers.some(s => s.id === joinedServerId)) sessionStore.removeItem('egv.openServer');
     if (!activeServerId && servers.length > 0) {
       setActiveServerId(servers[0].id);
     }
-  }, [servers, activeServerId]);
+  }, [servers, activeServerId, joinedServerId]);
 
   const activeServer = servers.find((s) => s.id === activeServerId) ?? null;
 
@@ -72,10 +74,11 @@ export default function Home() {
       const inVoice = voice.connectedChannelId
         ? channels.find((c) => c.id === voice.connectedChannelId)
         : null;
-      const first = inVoice ?? channels.find((c) => c.type === 'text') ?? channels[0];
+      const invitedVoice = joinedServerId === activeServerId ? channels.find(c => c.type === 'voice') : null;
+      const first = inVoice ?? invitedVoice ?? channels.find((c) => c.type === 'text') ?? channels[0];
       setActiveChannel(first ?? null);
     }
-  }, [activeServerId, channels, activeChannel, voice.connectedChannelId]);
+  }, [activeServerId, channels, activeChannel, voice.connectedChannelId, joinedServerId]);
 
   // WebSocket — обновляем кэш при новых сообщениях
   useWebSocket(!!user, (ev) => {
@@ -135,7 +138,10 @@ export default function Home() {
 
       {/* Колонка 2: чат (на мобильном — pane=chat) */}
       {!noServers ? (
-        <div className={`${mobilePane === 'chat' ? 'flex' : 'hidden'} md:flex flex-1 min-h-0`}>
+        <div className={`${mobilePane === 'chat' ? 'flex' : 'hidden'} md:flex flex-col flex-1 min-w-0 min-h-0`}>
+          {joinedServerId === activeServerId && activeServer && <div role="status" data-testid="joined-server-notice" className="border-b border-primary/20 bg-primary/10 px-4 py-3 text-sm">
+            Ты в «{activeServer.name}». Выберите с другом один голосовой канал и нажми «Подключиться».
+          </div>}
           <ChatArea
             channel={activeChannel}
             connectedChannelId={voice.connectedChannelId}
@@ -228,6 +234,7 @@ function EmptyState() {
         <p className="text-sm text-muted-foreground mb-6">
           Сервер — это твоя тусовка друзей. Внутри будут текстовые и голосовые каналы.
         </p>
+        <Link href="/join" data-testid="empty-join-server" className="block w-full rounded-lg border border-primary/40 bg-primary/10 px-3 py-3 text-primary text-sm font-semibold mb-5 hover:bg-primary/20">Войти по приглашению друга</Link>
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}

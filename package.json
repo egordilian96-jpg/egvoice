@@ -1,6 +1,6 @@
 {
   "name": "egvoice",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "license": "MIT",
   "type": "module",
   "scripts": {
@@ -9,6 +9,7 @@
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
     "test:voice": "tsx --test tests/voice-policy.test.ts",
+    "test:invites": "tsx --test tests/invites.test.ts",
     "test:voice-ui": "node tests/voice-ui.cjs",
     "test:voice-live": "node tests/voice-live.cjs",
     "test:mvp-api": "node tests/mvp-api.cjs",

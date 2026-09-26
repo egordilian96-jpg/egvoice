@@ -3,6 +3,9 @@ import { Link } from 'wouter';
 import { AlertTriangle, Mic, MicOff, PhoneOff, Headphones, Settings } from 'lucide-react';
 import { useVoice } from '@/lib/voice';
 import type { MicMode } from '@/lib/voice-policy';
+import { STEP_LABELS } from '@/lib/voice-diagnostics';
+import { copyInviteText as copyText } from '@/lib/invites';
+import { useToast } from '@/hooks/use-toast';
 
 const MODES: { id: MicMode; label: string; hint: string }[] = [
   { id: 'vad', label: 'Голосовая активация', hint: 'Говори без кнопок. Передача открывается по уровню сигнала.' },
@@ -43,6 +46,7 @@ export function MicModeControl({ compact = false }: { compact?: boolean }) {
 }
 export function VoiceNotice() {
   const v = useVoice();
+  const { toast } = useToast();
   const title = v.deviceLost ? 'Микрофон отключён'
     : v.processingPaused ? 'Обработка звука приостановлена'
     : v.audioBlocked ? 'Нажми, чтобы услышать друзей'
@@ -62,12 +66,21 @@ export function VoiceNotice() {
           : v.error || 'Микрофон пока не опубликован. Проверь разрешения и устройство.'}
       </p>
       <div className="flex flex-wrap gap-2 mt-3">
+        {v.publicationFailed && v.settings.networkMode !== 'relay' && <button className={button} disabled={v.connecting || v.deviceBusy} onClick={() => void v.engine.retryWithRelay()}>Переподключиться через TURN</button>}
         {(v.deviceLost || v.listenOnly) && <button className={button} disabled={v.deviceBusy} onClick={() => void v.engine.requestMicrophone()}>Повторить с этим микрофоном</button>}
         {(v.audioBlocked || v.processingPaused) && <button className={button} onClick={() => void v.engine.resumeAudio()}>Включить звук</button>}
         {v.noSignal && <button className={button} onClick={v.engine.dismissNoSignal}>Я просто молчу</button>}
         <Link href="/settings"><button className={button}>Проверить устройства</button></Link>
         {v.error && !v.listenOnly && !v.deviceLost && <button className={button} onClick={v.clearError}>Скрыть</button>}
       </div>
+      {v.diagnostic && <details className="mt-3 text-xs">
+        <summary className="cursor-pointer text-foreground">Технические подробности</summary>
+        <pre className="mt-2 whitespace-pre-wrap break-all text-muted-foreground" data-testid="voice-diagnostic">{v.diagnostic}</pre>
+        <button className={`${button} mt-2`} onClick={async () => {
+          const copied = await copyText(v.diagnostic);
+          toast({ title: copied ? 'Диагностика скопирована' : 'Выдели текст подробностей и нажми Ctrl+C' });
+        }}>Скопировать диагностику</button>
+      </details>}
     </div></div>
   </section>;
 }
@@ -76,7 +89,7 @@ export function VoiceToolbar() {
   if (!v.room && !v.connecting) return null;
   return <div className="border-t border-border bg-card px-3 py-3 flex flex-wrap items-center gap-3 shrink-0" data-testid="voice-toolbar">
     <div className="mr-auto">
-      <div className="text-xs font-semibold text-primary">{v.phase === 'reconnecting' ? 'Переподключаемся…' : v.connecting ? 'Подключаемся…' : 'Голос подключён'}</div>
+      <div className="text-xs font-semibold text-primary">{v.phase === 'reconnecting' ? 'Переподключаемся…' : v.connecting || v.deviceBusy ? STEP_LABELS[v.voiceStep] || 'Подключаемся…' : 'Голос подключён'}</div>
       <div className="text-xs text-muted-foreground">{v.outputMuted ? 'Звук и микрофон выключены' : v.micMuted ? 'Микрофон выключен' : v.transmitting ? 'Передача открыта' : 'Передача закрыта'}</div>
     </div>
     <MicModeControl compact />
@@ -115,12 +128,22 @@ export function LiveAudioSettings() {
         </label>
         <div role="meter" aria-label="Уровень микрофона" aria-valuemin={-80} aria-valuemax={0} aria-valuenow={Math.round(Math.max(-80, v.levelDb))}
           className="h-2 rounded-full overflow-hidden bg-secondary"><div className="h-full bg-primary transition-[width]" style={{ width: `${Math.max(0, Math.min(100, (v.levelDb + 80) / 80 * 100))}%` }} /></div>
-        <p className="text-xs text-muted-foreground">{v.deviceBusy ? 'Переключаем устройство…' : v.inputLabel || 'Проверка не запущена'} · {v.levelDb < -100 ? 'нет сигнала' : `${Math.round(v.levelDb)} дБFS`}</p>
+        <p className="text-xs text-muted-foreground">{v.deviceBusy ? STEP_LABELS[v.voiceStep] : v.inputLabel || 'Проверка не запущена'} · {v.levelDb < -100 ? 'нет сигнала' : `${Math.round(v.levelDb)} дБFS`}</p>
         {!v.room && <button className={button} disabled={v.deviceBusy} onClick={() => v.testing ? v.engine.stopTest() : void v.engine.requestMicrophone()}>{v.testing ? 'Остановить проверку' : 'Проверить микрофон'}</button>}
       </>}
       <p className="text-xs text-muted-foreground">Вывод звука: системные наушники / колонки. Для смены выбери устройство в ОС.</p>
     </section>
     <MicModeControl />
+    <section className="rounded-xl border border-border p-4 space-y-3">
+      <label className="block text-sm font-semibold">Маршрут голосового соединения
+        <select aria-label="Маршрут голоса" disabled={!!v.room || v.connecting} value={v.settings.networkMode}
+          onChange={e => v.engine.updateSettings({ networkMode: e.target.value as 'auto' | 'relay' })}
+          className="block mt-2 w-full bg-secondary p-3 rounded-lg text-sm">
+          <option value="auto">Автоматически</option><option value="relay">Через TURN (запасной маршрут)</option>
+        </select>
+      </label>
+      <p className="text-xs text-muted-foreground">Если микрофон работает в проверке, но не отправляется в канал, можно попробовать TURN. Он тоже требует доступного сервера и не гарантирует обход сетевых ограничений. Для ручной смены выйди из голоса.</p>
+    </section>
     {v.settings.mode === 'vad' && <label className="block text-sm">Порог активации: {v.settings.threshold} дБFS
       <input aria-label="Порог активации" type="range" min={-80} max={-10} value={v.settings.threshold}
         onChange={e => v.engine.updateSettings({ threshold: Number(e.target.value) })} className="block w-full accent-primary mt-3" />

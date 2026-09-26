@@ -12,6 +12,7 @@ import {
 import { hashPassword, verifyPassword, signToken, requireAuth, pickAvatarColor } from './auth';
 import { createLiveKitToken, LIVEKIT_URL, liveKitConfigured } from './livekit';
 import { setupRealtime, broadcastToChannel, broadcastToServer } from './realtime';
+import { registerFriends } from './friends';
 
 // ---------- helpers ----------
 
@@ -54,6 +55,7 @@ async function isMemberOfServer(userId: string, serverId: string) {
 export async function registerRoutes(httpServer: HttpServer, app: Express): Promise<HttpServer> {
   // WebSocket слой
   setupRealtime(httpServer);
+  registerFriends(app);
 
   // ====== AUTH ======
 
@@ -69,7 +71,7 @@ export async function registerRoutes(httpServer: HttpServer, app: Express): Prom
       const now = new Date();
       const avatarColor = pickAvatarColor(data.email);
       await db.insert(users).values({
-        id, email: data.email, passwordHash, nickname: data.nickname,
+        id, email: data.email, passwordHash, nickname: data.nickname, nicknameKey: data.nickname.toLocaleLowerCase('ru'),
         avatarColor, createdAt: now, lastSeenAt: now,
       });
       const [u] = await db.select().from(users).where(eq(users.id, id)).limit(1);

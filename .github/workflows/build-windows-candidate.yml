@@ -25,6 +25,7 @@ jobs:
     timeout-minutes: 45
     env:
       VITE_API_URL: ${{ inputs.api_url || 'https://egvoice.pplx.app/port/5000' }}
+      VITE_PUBLIC_APP_URL: https://egvoice.pplx.app
       CARGO_INCREMENTAL: "0"
     steps:
       - uses: actions/checkout@v4
@@ -70,6 +71,8 @@ jobs:
           npm run check
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm run test:voice
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run test:invites
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Build unsigned installers

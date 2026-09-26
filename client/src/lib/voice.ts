@@ -4,10 +4,12 @@ import { api, ApiError } from './api';
 import { DEFAULT_VOICE_SETTINGS, normalizeSettings, wantsTransmission, mediaError, type VoiceSettings } from './voice-policy';
 import workletUrl from './voice-worklet.js?url';
 import { localStore } from './storage';
+import { safeVoiceError, publishErrorText, type VoiceStep } from './voice-diagnostics';
 
 export type VoiceParticipant = {
   identity: string; name: string; isLocal: boolean; isSpeaking: boolean; isMicMuted: boolean;
   audioLevel: number; audioTrack: LocalAudioTrack | RemoteAudioTrack | null;
+  connectionQuality?: string; listenOnly?: boolean;
 };
 type Phase = 'idle' | 'token' | 'connecting' | 'connected' | 'reconnecting' | 'failed';
 type Capture = { stream: MediaStream; ctx: AudioContext; source: MediaStreamAudioSourceNode; gate: AudioWorkletNode; dest: MediaStreamAudioDestinationNode; published: LocalAudioTrack };
@@ -23,6 +25,8 @@ export class VoiceEngine {
   private testing = false;
   private disposed = false;
   private audio = new Map<RemoteAudioTrack, HTMLAudioElement>();
+  private diagnosticStart = 0;
+  private diagnosticEvents: string[] = [];
   state = {
     room: null as Room | null, connectedChannelId: null as string | null, targetChannelId: null as string | null,
     participants: [] as VoiceParticipant[], micMuted: false, outputMuted: false, connecting: false,
@@ -31,6 +35,7 @@ export class VoiceEngine {
     permission: false, deviceBusy: false, inputLabel: '', levelDb: -120, transmitting: false,
     noSignal: false, deviceLost: false, listenOnly: false, audioBlocked: false, processingPaused: false,
     storageWarning: false, testing: false,
+    voiceStep: 'idle' as VoiceStep, diagnostic: '', publicationFailed: false,
   };
   subscribe = (fn: () => void) => { this.listeners.add(fn); return () => { this.listeners.delete(fn); }; };
   snapshot = () => this.state;
@@ -38,6 +43,19 @@ export class VoiceEngine {
     if (this.disposed) return;
     this.state = { ...this.state, ...patch };
     this.listeners.forEach(fn => fn());
+  }
+  private step(value: VoiceStep) {
+    this.diagnosticEvents.push(`${Math.round(performance.now() - this.diagnosticStart)}ms ${value}`);
+    this.diagnosticEvents = this.diagnosticEvents.slice(-12);
+    this.emit({ voiceStep: value });
+  }
+  private failure(err: unknown) {
+    this.emit({ diagnostic: [
+      'EG Voice 0.2.2',
+      `route=${this.state.settings.networkMode}`,
+      ...this.diagnosticEvents,
+      safeVoiceError(err),
+    ].join('\n') });
   }
   start() {
     this.disposed = false;
@@ -131,6 +149,7 @@ export class VoiceEngine {
     this.applyGate();
   }
   private async buildCapture(settings: VoiceSettings): Promise<Capture> {
+    this.step('capture');
     if (!navigator.mediaDevices?.getUserMedia) throw new Error('HTTPS required');
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: {
@@ -142,8 +161,15 @@ export class VoiceEngine {
     let ctx: AudioContext | undefined;
     try {
       ctx = new AudioContext({ latencyHint: 'interactive' });
+      this.step('worklet');
       await ctx.audioWorklet.addModule(workletUrl);
-      await ctx.resume();
+      this.step('resume');
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([ctx.resume(), new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error('AudioContext resume timeout')), 8000);
+        })]);
+      } finally { clearTimeout(timer); }
       if (ctx.state !== 'running') throw new Error('AudioContext suspended');
       const source = ctx.createMediaStreamSource(stream);
       const gate = new AudioWorkletNode(ctx, 'eg-voice-gate', { outputChannelCount: [1] });
@@ -174,7 +200,8 @@ export class VoiceEngine {
   private async acquire(settings: VoiceSettings) {
     if (this.state.deviceBusy) return false;
     const operation = ++this.captureEpoch, epoch = this.epoch, room = this.state.room;
-    this.emit({ deviceBusy: true, error: null, noSignal: false }); this.applyGate();
+    this.diagnosticStart = performance.now(); this.diagnosticEvents = [];
+    this.emit({ deviceBusy: true, error: null, noSignal: false, diagnostic: '', publicationFailed: false }); this.applyGate();
     let c: Capture | null = null;
     try {
       c = await this.buildCapture(settings);
@@ -182,6 +209,7 @@ export class VoiceEngine {
       const previous = this.capture;
       // Do not publish a second microphone. Gate is closed until commit succeeds.
       if (room) {
+        this.step('publish');
         if (previous) await room.localParticipant.unpublishTrack(previous.published, false);
         await room.localParticipant.publishTrack(c.published, { source: Track.Source.Microphone });
       }
@@ -201,13 +229,16 @@ export class VoiceEngine {
       this.emit({ inputLabel: c.stream.getAudioTracks()[0].label || 'Микрофон', permission: true, listenOnly: false, deviceLost: false, processingPaused: false });
       this.silenceSince = 0;
       await this.refreshDevices();
+      this.step('ready');
       return true;
     } catch (err) {
       this.closeCapture(c);
       if (epoch !== this.epoch || operation !== this.captureEpoch) return false;
       // A failed replacement never silently returns to an unpublished microphone.
       this.closeCapture(this.capture); this.capture = null;
-      this.emit({ error: room ? `${mediaError(err)} Голосовой канал открыт, но ты только слушаешь. Если доступ разрешён, возможна ошибка публикации звука.` : mediaError(err), listenOnly: !!room, transmitting: false });
+      const publicationFailed = this.state.voiceStep === 'publish';
+      this.failure(err);
+      this.emit({ error: publicationFailed ? publishErrorText() : `${mediaError(err)}${room ? ' Канал открыт в режиме слушателя.' : ''}`, publicationFailed, listenOnly: !!room, transmitting: false });
       return false;
     } finally {
       if (epoch === this.epoch && operation === this.captureEpoch) {
@@ -236,10 +267,19 @@ export class VoiceEngine {
     if (this.capture) await this.acquire(settings);
     else this.updateSettings(settings);
   };
+  retryWithRelay = async () => {
+    const channel = this.state.connectedChannelId || this.state.targetChannelId;
+    if (!channel || this.state.connecting || this.state.deviceBusy) return;
+    this.updateSettings({ networkMode: 'relay' });
+    await this.leave();
+    await this.joinChannel(channel);
+  };
   joinChannel = async (channelId: string) => {
     if (this.state.connecting || this.state.connectedChannelId === channelId) return;
     await this.leave();
     const epoch = ++this.epoch;
+    this.diagnosticStart = performance.now(); this.diagnosticEvents = [];
+    this.step('token');
     this.emit({ phase: 'token', connecting: true, targetChannelId: channelId, error: null });
     let r: Room | null = null;
     try {
@@ -248,13 +288,18 @@ export class VoiceEngine {
       r = new Room({ adaptiveStream: true, dynacast: true });
       this.emit({ room: r, phase: 'connecting' });
       this.wire(r, epoch);
-      await r.connect(url, token);
+      this.step('connect');
+      await r.connect(url, token, {
+        peerConnectionTimeout: 12000, websocketTimeout: 10000,
+        rtcConfig: this.state.settings.networkMode === 'relay' ? { iceTransportPolicy: 'relay' } : undefined,
+      });
       if (epoch !== this.epoch || this.disposed) { await r.disconnect(); return; }
       this.emit({ phase: 'connected', connectedChannelId: channelId });
       await this.acquire(this.state.settings);
       this.rebuild();
     } catch (err) {
       if (epoch === this.epoch) {
+        this.failure(err);
         this.emit({ phase: 'failed', error: err instanceof ApiError ? err.message : 'Не удалось подключить голос. Проверь интернет и повтори. Если чат работает, проблема может быть в голосовом сервере или передаче медиа; точная причина пока неизвестна.', room: null, connectedChannelId: null });
         this.clearAudio(); this.closeCapture(this.capture); this.capture = null;
       }
@@ -269,13 +314,14 @@ export class VoiceEngine {
     this.emit({ room: null, connectedChannelId: null, targetChannelId: null, participants: [], connecting: false,
       phase: 'idle', deviceBusy: false, noSignal: false, deviceLost: false, listenOnly: false, transmitting: false,
       testing: false, processingPaused: false, audioBlocked: false, levelDb: -120, error: null });
+    this.emit({ voiceStep: 'idle', publicationFailed: false });
     await r?.disconnect().catch(() => {});
   };
   private wire(r: Room, epoch: number) {
     const current = () => epoch === this.epoch && r === this.state.room;
     const refresh = () => { if (current()) this.rebuild(); };
     [RoomEvent.ParticipantConnected, RoomEvent.ParticipantDisconnected, RoomEvent.TrackMuted, RoomEvent.TrackUnmuted,
-      RoomEvent.ActiveSpeakersChanged, RoomEvent.LocalTrackPublished, RoomEvent.LocalTrackUnpublished].forEach(ev => r.on(ev, refresh));
+      RoomEvent.ActiveSpeakersChanged, RoomEvent.LocalTrackPublished, RoomEvent.LocalTrackUnpublished, RoomEvent.ConnectionQualityChanged].forEach(ev => r.on(ev, refresh));
     r.on(RoomEvent.TrackSubscribed, track => {
       if (!current() || track.kind !== Track.Kind.Audio) return;
       const t = track as RemoteAudioTrack, el = t.attach();
@@ -308,6 +354,7 @@ export class VoiceEngine {
     this.emit({ participants: people.map((p: Participant) => {
       const pub = p.getTrackPublication(Track.Source.Microphone), local = p === r.localParticipant;
       return { identity: p.identity, name: p.name || p.identity, isLocal: local,
+        connectionQuality: p.connectionQuality, listenOnly: local ? this.state.listenOnly : !pub,
         isSpeaking: local ? this.state.transmitting && this.state.levelDb > -60 : p.isSpeaking,
         isMicMuted: local ? this.state.micMuted || this.state.outputMuted || this.state.listenOnly || this.state.deviceLost : !pub || pub.isMuted,
         audioLevel: p.audioLevel, audioTrack: pub?.track as LocalAudioTrack | RemoteAudioTrack || null };

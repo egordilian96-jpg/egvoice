@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { getToken, API_BASE } from './api';
+import { getToken, getWsUrl } from './api';
 
 export type WsEvent =
   | { type: 'hello'; data: { userId: string } }
@@ -24,17 +24,8 @@ export function useWebSocket(enabled: boolean, onEvent: (e: WsEvent) => void) {
     const connect = () => {
       const token = getToken();
       if (!token) return;
-      // Если API_BASE — полный URL (preview), берём host из него.
-      let wsBase: string;
-      if (API_BASE) {
-        const u = new URL(API_BASE, location.origin);
-        const proto = u.protocol === 'https:' ? 'wss:' : 'ws:';
-        wsBase = `${proto}//${u.host}`;
-      } else {
-        const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-        wsBase = `${proto}//${location.host}`;
-      }
-      const url = `${wsBase}/ws?token=${encodeURIComponent(token)}`;
+      // Keep backend path prefixes, e.g. /port/5000, for chat/member events.
+      const url = `${getWsUrl('/ws')}?token=${encodeURIComponent(token)}`;
       ws = new WebSocket(url);
 
       ws.onmessage = (ev) => {

@@ -19,15 +19,16 @@ export default function Invite({ code }: { code: string }) {
   const [preview, setPreview] = useState<InvitePreview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let active = true;
     setPreview(null); setError(null);
-    api.get<InvitePreview>(`/api/invites/${code}`)
+    api.get<InvitePreview>(`/api/invites/${encodeURIComponent(code)}`)
       .then(result => { if (active) setPreview(result); })
       .catch((err) => { if (active) setError(err instanceof ApiError ? err.message : 'Не удалось загрузить'); });
     return () => { active = false; };
-  }, [code]);
+  }, [code, attempt]);
 
   const accept = async () => {
     if (busy) return;
@@ -40,7 +41,9 @@ export default function Invite({ code }: { code: string }) {
     setBusy(true);
     setError(null);
     try {
-      await api.post<{ serverId: string }>(`/api/invites/${code}/accept`);
+      const result = await api.post<{ serverId: string }>(`/api/invites/${encodeURIComponent(code)}/accept`);
+      sessionStore.setItem('egv.openServer', result.serverId);
+      sessionStore.removeItem('egv.pendingInvite');
       await qc.invalidateQueries({ queryKey: ['/api/servers'] });
       setLocation('/');
     } catch (err) {
@@ -62,9 +65,8 @@ export default function Invite({ code }: { code: string }) {
         {error && !preview ? (
           <>
             <div className="text-destructive font-semibold mb-3">{error}</div>
-            <Link href="/">
-              <button className="text-sm text-primary hover:underline">На главную</button>
-            </Link>
+            <button className="text-sm text-primary hover:underline mb-4 block mx-auto" onClick={() => setAttempt(a => a + 1)}>Повторить загрузку</button>
+            <Link href="/join" className="text-sm text-primary hover:underline">Ввести другое приглашение</Link>
           </>
         ) : preview ? (
           <>
@@ -80,7 +82,7 @@ export default function Invite({ code }: { code: string }) {
 
             <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground mb-8">
               <Users className="w-4 h-4" />
-              <span>сервер EG Voice</span>
+              <span>Добавим сервер в твой список. Микрофон сам не включится.</span>
             </div>
 
             {error && (

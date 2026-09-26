@@ -5,6 +5,7 @@ export const RoomEvent = Object.fromEntries([
   'ParticipantConnected', 'ParticipantDisconnected', 'TrackMuted', 'TrackUnmuted', 'ActiveSpeakersChanged',
   'LocalTrackPublished', 'LocalTrackUnpublished', 'TrackSubscribed', 'TrackUnsubscribed',
   'AudioPlaybackStatusChanged', 'Reconnecting', 'Reconnected', 'Disconnected',
+  'ConnectionQualityChanged',
 ].map(k => [k, k]));
 export class LocalAudioTrack {
   kind = 'audio'; isMuted = false;
@@ -30,7 +31,9 @@ export class Room {
   constructor() { ((window as any).__rooms ||= []).push(this); }
   on(event: string, fn: Function) { (this.events[event] ||= []).push(fn); return this; }
   emit(event: string, ...args: any[]) { this.events[event]?.forEach(fn => fn(...args)); }
-  async connect() {
+  connectOptions: any;
+  async connect(_url?: string, _token?: string, options?: any) {
+    this.connectOptions = options;
     const delay = (window as any).__connectDelay || 0;
     if (delay) await new Promise(resolve => setTimeout(resolve, delay));
   }

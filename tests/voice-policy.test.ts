@@ -3,6 +3,16 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import { normalizeSettings, DEFAULT_VOICE_SETTINGS as defaults, wantsTransmission, mediaError } from '../client/src/lib/voice-policy';
+import { safeVoiceError } from '../client/src/lib/voice-diagnostics';
+
+test('diagnostics remove URLs, tokens and IP addresses', () => {
+  const result = safeVoiceError(new Error('Failed wss://example.com/rtc?token=secret 192.168.1.1 eyJabc.def.ghi'));
+  assert.ok(!result.includes('secret') && !result.includes('192.168') && !result.includes('eyJabc'));
+});
+test('network mode accepts relay only explicitly', () => {
+  assert.equal(normalizeSettings({}).networkMode, 'auto');
+  assert.equal(normalizeSettings({ networkMode: 'relay' }).networkMode, 'relay');
+});
 
 test('settings reject corrupt values, clamp numbers and preserve valid modes', () => {
   assert.equal(normalizeSettings({ threshold: NaN }).threshold, -42);

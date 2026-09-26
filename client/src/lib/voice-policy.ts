@@ -1,5 +1,6 @@
 export type MicMode = 'vad' | 'open' | 'ptt';
 export type VoiceSettings = {
+  networkMode: 'auto' | 'relay';
   mode: MicMode;
   pttKind: 'hold' | 'toggle';
   threshold: number;
@@ -10,6 +11,7 @@ export type VoiceSettings = {
   autoGainControl: boolean;
 };
 export const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
+  networkMode: 'auto',
   mode: 'vad', pttKind: 'hold', threshold: -42, releaseMs: 200,
   inputId: 'default', echoCancellation: true, noiseSuppression: true, autoGainControl: false,
 };
@@ -17,6 +19,7 @@ export function normalizeSettings(value: Partial<VoiceSettings>): VoiceSettings 
   const bounded = (v: unknown, fallback: number, min: number, max: number) =>
     typeof v === 'number' && Number.isFinite(v) ? Math.round(Math.max(min, Math.min(max, v))) : fallback;
   return {
+    networkMode: value.networkMode === 'relay' ? 'relay' : 'auto',
     mode: ['vad', 'open', 'ptt'].includes(value.mode ?? '') ? value.mode! : 'vad',
     pttKind: value.pttKind === 'toggle' ? 'toggle' : 'hold',
     threshold: bounded(value.threshold, -42, -80, -10),

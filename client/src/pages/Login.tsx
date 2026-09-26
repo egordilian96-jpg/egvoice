@@ -83,6 +83,7 @@ export default function Login() {
           Создать
         </Link>
       </div>
+      <Link href="/join" className="block mt-4 text-center text-sm text-primary">Есть приглашение? Вставить ссылку или код</Link>
     </AuthShell>
   );
 }

@@ -12,6 +12,8 @@ import Login from '@/pages/Login';
 import Register from '@/pages/Register';
 import Settings from '@/pages/Settings';
 import Invite from '@/pages/Invite';
+import Join from '@/pages/Join';
+import Friends from '@/pages/Friends';
 import { VoiceProvider } from '@/lib/voice';
 
 function LoadingScreen() {
@@ -63,6 +65,8 @@ function AppRouter() {
       <Route path="/invite/:code">
         {(params) => <Invite code={params.code} />}
       </Route>
+      <Route path="/join" component={Join} />
+      <Route path="/friends"><Protected><Friends /></Protected></Route>
       <Route component={NotFound} />
     </Switch>
   );

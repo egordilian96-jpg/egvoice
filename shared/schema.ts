@@ -10,6 +10,7 @@ export const users = sqliteTable('users', {
   email: text('email').notNull().unique(),
   passwordHash: text('password_hash').notNull(),
   nickname: text('nickname').notNull(),
+  nicknameKey: text('nickname_key').notNull().default(''),
   avatarColor: text('avatar_color').notNull().default('#3b82f6'),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
   lastSeenAt: integer('last_seen_at', { mode: 'timestamp' }),
@@ -146,9 +147,9 @@ export type Invite = typeof invites.$inferSelect;
 export type ServerMember = typeof serverMembers.$inferSelect;
 
 // User без хеша пароля (то, что отдаём в API)
-export type PublicUser = Omit<User, 'passwordHash'>;
+export type PublicUser = Omit<User, 'passwordHash' | 'nicknameKey'>;
 
 export function toPublicUser(u: User): PublicUser {
-  const { passwordHash, ...rest } = u;
+  const { passwordHash, nicknameKey, ...rest } = u;
   return rest;
 }

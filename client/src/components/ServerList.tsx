@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Plus, Home } from 'lucide-react';
+import { Plus, Home, UserPlus } from 'lucide-react';
+import { Link } from 'wouter';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -16,20 +17,30 @@ export function ServerList({ servers, activeServerId, onSelect }: Props) {
 
   return (
     <>
-      <aside className="w-[72px] shrink-0 bg-sidebar/60 border-r border-sidebar-border flex flex-col items-center gap-2 py-3">
+      <aside className="w-[72px] shrink-0 overflow-y-auto bg-sidebar/60 border-r border-sidebar-border flex flex-col items-center gap-2 py-3">
         <Tooltip>
           <TooltipTrigger asChild>
-            <button
+            <Link href="/friends" aria-label="Друзья"
               className="w-12 h-12 rounded-2xl bg-secondary hover-elevate flex items-center justify-center text-primary transition-all"
               data-testid="button-home"
             >
               <Home className="w-5 h-5" />
-            </button>
+            </Link>
           </TooltipTrigger>
-          <TooltipContent side="right">Личные сообщения</TooltipContent>
+          <TooltipContent side="right">Друзья</TooltipContent>
         </Tooltip>
 
         <div className="w-8 h-px bg-sidebar-border my-1" />
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Link href="/join" aria-label="Войти по приглашению" data-testid="button-join-server"
+              className="w-12 h-12 shrink-0 rounded-2xl border border-primary/30 bg-primary/10 flex items-center justify-center text-primary hover:bg-primary/20">
+              <UserPlus className="w-5 h-5" />
+            </Link>
+          </TooltipTrigger>
+          <TooltipContent side="right">Войти по приглашению</TooltipContent>
+        </Tooltip>
 
         {servers.map((s) => {
           const active = s.id === activeServerId;
