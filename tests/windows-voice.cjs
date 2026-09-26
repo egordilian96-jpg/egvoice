@@ -22,12 +22,13 @@ const assert = require('node:assert/strict');
     }, stdio: 'ignore',
   });
   let browser;
+  let connectionError = '';
   const redact = text => String(text).replace(/(?:https?|wss?):\/\/\S+/g, '[url]')
     .replace(/\beyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, '[token]').slice(0, 700);
   try {
     for (let i = 0; i < 60; i++) {
       try { browser = await chromium.connectOverCDP('http://127.0.0.1:9222'); break; }
-      catch { await new Promise(r => setTimeout(r, 500)); }
+      catch (e) { connectionError = redact(e.message); await new Promise(r => setTimeout(r, 500)); }
     }
     assert.ok(browser, 'WebView2 debugging endpoint became available');
     const context = browser.contexts()[0];
@@ -125,6 +126,7 @@ const assert = require('node:assert/strict');
     assert.ok(report.attempts.every(a => a.publication), 'native audio publication succeeds in auto and relay');
   } catch (error) {
     report.error = redact(error.message);
+    if (!browser) { report.connectionError = connectionError; report.processExit = app.exitCode; }
     process.exitCode = 1;
   } finally {
     fs.writeFileSync(path.join(out, 'native-voice-result.json'), JSON.stringify(report, null, 2));

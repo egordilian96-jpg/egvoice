@@ -34,8 +34,21 @@ jobs:
           $target = Join-Path $env:RUNNER_TEMP "egvoice-installed"
           $setup = Start-Process $exe -ArgumentList @("/S", "/D=$target") -PassThru -Wait
           if ($setup.ExitCode -ne 0) { throw "Installer exit: $($setup.ExitCode)" }
+          # Hosted runner is elevated: current WebView2 ignores env/HKCU flags.
+          # App-scoped HKLM policy is allowed, on this disposable runner only.
+          $key = "HKLM:\Software\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments"
+          New-Item -Path $key -Force | Out-Null
+          $flags = "--remote-debugging-port=9222 --use-fake-device-for-media-stream --use-fake-ui-for-media-stream --autoplay-policy=no-user-gesture-required"
+          New-ItemProperty -Path $key -Name "eg-voice.exe" -Value $flags -PropertyType String -Force | Out-Null
+          New-ItemProperty -Path $key -Name "ru.egvoice.app" -Value $flags -PropertyType String -Force | Out-Null
       - name: Real native publication via auto and TURN
         run: node tests/windows-voice.cjs
+      - name: Remove runner-only debugging policy
+        if: always()
+        shell: pwsh
+        run: |
+          $key = "HKLM:\Software\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments"
+          Remove-ItemProperty -Path $key -Name "eg-voice.exe","ru.egvoice.app" -ErrorAction SilentlyContinue
       - uses: actions/upload-artifact@v4
         if: always()
         with:
